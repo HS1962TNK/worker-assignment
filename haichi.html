@@ -52,7 +52,9 @@ input:focus{outline:none;border-color:#1d6fcf}
 .panel-header{background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
 .panel-title{font-size:16px;font-weight:700}
 .btn-close{padding:6px 14px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer}
-.roster-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#fff;border-radius:10px;margin-bottom:6px}
+.roster-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#fff;border-radius:10px;margin-bottom:6px;border:1.5px solid transparent}
+.roster-item.selected{border-color:#1d6fcf;background:#eff6ff}
+.roster-item.selected .name{color:#1d6fcf;font-weight:700}
 .roster-item .name{font-size:13px;font-weight:600}
 .roster-item .status{font-size:11px;color:#9ca3af;margin-left:6px}
 .roster-item button{padding:6px 10px;border:1.5px solid #e5e7eb;border-radius:7px;background:#fff;font-size:11px;font-weight:600;cursor:pointer}
@@ -154,6 +156,7 @@ input:focus{outline:none;border-color:#1d6fcf}
           <button onclick="submitManualWorker()">追加</button>
         </div>
       </div>
+      <button class="btn-save" id="worker-picker-confirm-btn" onclick="confirmWorkerPicker()" style="margin-top:10px">追加する</button>
     </div>
   </div>
 </div>
@@ -346,8 +349,11 @@ function unassignWorker(siteIdx, name){
 let kintaiEmployees = null;      // 勤怠管理アプリ側の従業員一覧(キャッシュ、['氏名',...])
 let workerPickerTargetSiteIdx = null; // 選んだ作業員をどの現場カードに割り当てるか(nullなら名簿登録のみ)
 
+let workerPickerSelected = new Set(); // このモーダルを開いている間に選んだ(まだ確定していない)作業員名
+
 function openWorkerPicker(siteIdx){
   workerPickerTargetSiteIdx = (typeof siteIdx === 'number') ? siteIdx : null;
+  workerPickerSelected = new Set();
   document.getElementById('worker-picker-overlay').classList.add('show');
   document.getElementById('worker-picker-filter').value = '';
   document.getElementById('new-worker-manual-name').value = '';
@@ -412,9 +418,15 @@ function renderWorkerPicker(){
   const excluded = kintaiExcludeSet || new Set();
   // 候補は「勤怠管理アプリの一覧」と「こちらのアプリで手入力登録した在籍作業員」の両方から出す
   // (手入力で登録した協力会社の応援などは勤怠管理アプリに存在しないため)
-  const candidateSource = new Set([...kintaiEmployees, ...allWorkers]);
-  let list = [...candidateSource].filter(name => !already.has(name) && !excluded.has(name));
-  if(filterText) list = list.filter(name => name.includes(filterText));
+  const candidateSource = new Set([...kintaiEmployees, ...allWorkers, ...workerPickerSelected]);
+  // 選択中の人は、絞り込み条件に関わらず常に一覧に残す(検索中に選択が見えなくなるのを防ぐ)
+  let list = [...candidateSource].filter(name =>
+    workerPickerSelected.has(name) || (!already.has(name) && !excluded.has(name))
+  );
+  if(filterText) list = list.filter(name => workerPickerSelected.has(name) || name.includes(filterText));
+  list.sort((a, b) => (workerPickerSelected.has(b) ? 1 : 0) - (workerPickerSelected.has(a) ? 1 : 0));
+
+  updateWorkerPickerConfirmBtn();
 
   if(list.length === 0){
     listEl.innerHTML = '<div style="font-size:12px;color:#9ca3af;padding:8px">' +
@@ -422,37 +434,57 @@ function renderWorkerPicker(){
       '</div>';
     return;
   }
-  listEl.innerHTML = list.map(name =>
-    '<div class="roster-item">' +
-      '<span class="name" style="cursor:pointer" onclick="pickWorker(\'' + attrJsStr(name) + '\')">' + esc(name) + '</span>' +
-      '<span style="display:flex;gap:6px">' +
-        '<button onclick="pickWorker(\'' + attrJsStr(name) + '\')">追加</button>' +
-        '<button title="今後この一覧に出さない(営業職など)" onclick="excludeKintaiName(\'' + attrJsStr(name) + '\')" style="color:#9ca3af">🚫</button>' +
-      '</span>' +
-    '</div>'
-  ).join('');
+  listEl.innerHTML = list.map(name => {
+    const checked = workerPickerSelected.has(name);
+    return '<div class="roster-item' + (checked ? ' selected' : '') + '" style="cursor:pointer" onclick="toggleWorkerPick(\'' + attrJsStr(name) + '\')">' +
+      '<span class="name">' + (checked ? '✅ ' : '⬜ ') + esc(name) + '</span>' +
+      '<button title="今後この一覧に出さない(営業職など)" onclick="event.stopPropagation();excludeKintaiName(\'' + attrJsStr(name) + '\')" style="color:#9ca3af">🚫</button>' +
+    '</div>';
+  }).join('');
 }
 
-function pickWorker(name){
-  postAction({action:'addWorker', name}).then(res => {
-    if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
+function toggleWorkerPick(name){
+  if(workerPickerSelected.has(name)) workerPickerSelected.delete(name);
+  else workerPickerSelected.add(name);
+  renderWorkerPicker();
+}
+
+function updateWorkerPickerConfirmBtn(){
+  const btn = document.getElementById('worker-picker-confirm-btn');
+  const n = workerPickerSelected.size;
+  btn.textContent = n > 0 ? (n + '名を追加する') : '追加する';
+  btn.disabled = n === 0;
+}
+
+async function confirmWorkerPicker(){
+  const names = [...workerPickerSelected];
+  if(names.length === 0) return;
+  const btn = document.getElementById('worker-picker-confirm-btn');
+  btn.disabled = true;
+  let okCount = 0;
+  for(const name of names){
+    const res = await postAction({action:'addWorker', name});
+    if(res.status !== 'ok') continue;
+    okCount++;
     if(!allWorkers.includes(name)) allWorkers.push(name);
     if(workerPickerTargetSiteIdx !== null){
       const site = currentSites[workerPickerTargetSiteIdx];
       if(site && !site.workers.includes(name)) site.workers.push(name);
     }
-    renderSites();
-    closeWorkerPicker();
-    if(document.getElementById('manage-overlay').classList.contains('show')) loadRoster();
-    showToast('✅ 「' + name + '」を追加しました');
-  });
+  }
+  renderSites();
+  closeWorkerPicker();
+  if(document.getElementById('manage-overlay').classList.contains('show')) loadRoster();
+  showToast('✅ ' + okCount + '名を追加しました');
 }
 
 function submitManualWorker(){
   const input = document.getElementById('new-worker-manual-name');
   const name = input.value.trim();
   if(!name) return;
-  pickWorker(name);
+  workerPickerSelected.add(name);
+  input.value = '';
+  renderWorkerPicker();
 }
 
 async function excludeKintaiName(name){
