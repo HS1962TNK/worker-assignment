@@ -24,6 +24,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .empty-state{text-align:center;padding:60px 20px;color:#9ca3af}
 .empty-icon{font-size:48px;margin-bottom:12px}
 .loading{text-align:center;padding:40px;color:#9ca3af;font-size:13px}
+
+.date-select-wrap{margin-top:8px}
+.date-select-wrap select{padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;color:#1a1a1a;background:#fff;-webkit-appearance:none;max-width:220px}
 </style>
 </head>
 <body>
@@ -31,6 +34,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="header">
   <div class="title">🧑‍🔧 作業員配置</div>
   <div class="sub" id="date-label">読み込み中…</div>
+  <div class="date-select-wrap">
+    <select id="date-select" onchange="loadDate(this.value)"><option>読み込み中…</option></select>
+  </div>
 </div>
 
 <div class="content" id="content">
@@ -55,10 +61,20 @@ function formatDateLabel(dateStr){
   }catch(e){ return dateStr; }
 }
 
-window.onload = () => {
-  const params = new URLSearchParams(location.search);
-  const dateParam = params.get('date') || '';
+function formatDateOption(dateStr){
+  try{
+    const [y,m,d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    const wd = ['日','月','火','水','木','金','土'][dt.getDay()];
+    return y + '/' + m + '/' + d + '(' + wd + ')';
+  }catch(e){ return dateStr; }
+}
+
+let availableDates = [];
+
+function loadDate(dateParam){
   const url = GAS_URL + '?action=getShareData' + (dateParam ? '&date=' + encodeURIComponent(dateParam) : '');
+  document.getElementById('content').innerHTML = '<div class="loading">読み込み中…</div>';
 
   fetch(url)
     .then(r => r.json())
@@ -75,6 +91,11 @@ window.onload = () => {
         return;
       }
       document.getElementById('date-label').textContent = formatDateLabel(res.date);
+      const sel = document.getElementById('date-select');
+      if(sel.value !== res.date) sel.value = res.date;
+      const newUrl = location.pathname + '?date=' + encodeURIComponent(res.date);
+      history.replaceState(null, '', newUrl);
+
       const sites = res.sites || [];
       if(sites.length === 0){
         document.getElementById('content').innerHTML =
@@ -93,6 +114,33 @@ window.onload = () => {
       document.getElementById('date-label').textContent = 'エラー';
       document.getElementById('content').innerHTML = '<div class="empty-state">通信に失敗しました</div>';
     });
+}
+
+function loadDateList(selectedDate){
+  fetch(GAS_URL + '?action=getAvailableDates')
+    .then(r => r.json())
+    .then(res => {
+      availableDates = res.dates || [];
+      const sel = document.getElementById('date-select');
+      if(availableDates.length === 0){
+        sel.innerHTML = '<option value="">(データなし)</option>';
+        return;
+      }
+      sel.innerHTML = availableDates.map(d =>
+        '<option value="' + esc(d) + '">' + esc(formatDateOption(d)) + '</option>'
+      ).join('');
+      if(selectedDate && availableDates.includes(selectedDate)) sel.value = selectedDate;
+    })
+    .catch(() => {
+      document.getElementById('date-select').innerHTML = '<option value="">(取得失敗)</option>';
+    });
+}
+
+window.onload = () => {
+  const params = new URLSearchParams(location.search);
+  const dateParam = params.get('date') || '';
+  loadDateList(dateParam);
+  loadDate(dateParam);
 };
 </script>
 </body>
