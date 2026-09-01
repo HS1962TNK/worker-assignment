@@ -165,6 +165,9 @@ input:focus{outline:none;border-color:#1d6fcf}
         <input type="text" id="new-site-name" placeholder="新しい現場名">
         <button onclick="submitAddSite()">追加</button>
       </div>
+
+      <div class="roster-section-title">🚫 作業員選択画面から除外中(勤怠管理アプリの一覧のうち非表示にした人)</div>
+      <div id="kintai-exclude-roster"></div>
     </div>
   </div>
 </div>
@@ -349,12 +352,23 @@ function closeWorkerPicker(){
   document.getElementById('worker-picker-overlay').classList.remove('show');
 }
 
+let kintaiExcludeSet = null; // 勤怠管理アプリの一覧から常に除外する人(営業職など、こちらのアプリ内で管理)
+
+function loadKintaiExcludeList(){
+  return fetch(GAS_URL + '?action=getKintaiExcludeList')
+    .then(r => r.json())
+    .then(res => { kintaiExcludeSet = new Set(res.names || []); })
+    .catch(() => { kintaiExcludeSet = new Set(); });
+}
+
 function loadKintaiEmployees(){
   const listEl = document.getElementById('worker-picker-list');
   if(listEl) listEl.innerHTML = '<div class="loading">勤怠管理アプリから取得中…</div>';
-  return fetch(KINTAI_GAS_URL + '?action=getEmployees')
-    .then(r => r.json())
-    .then(res => {
+  return Promise.all([
+    fetch(KINTAI_GAS_URL + '?action=getEmployees').then(r => r.json()),
+    kintaiExcludeSet === null ? loadKintaiExcludeList() : Promise.resolve()
+  ])
+    .then(([res]) => {
       kintaiEmployees = (res.employees || []).map(e => e.name).filter(Boolean);
       renderWorkerPicker();
     })
@@ -383,7 +397,8 @@ function renderWorkerPicker(){
     already = new Set();
     currentSites.forEach(s => s.workers.forEach(w => already.add(w)));
   }
-  let list = kintaiEmployees.filter(name => !already.has(name));
+  const excluded = kintaiExcludeSet || new Set();
+  let list = kintaiEmployees.filter(name => !already.has(name) && !excluded.has(name));
   if(filterText) list = list.filter(name => name.includes(filterText));
 
   if(list.length === 0){
@@ -393,9 +408,12 @@ function renderWorkerPicker(){
     return;
   }
   listEl.innerHTML = list.map(name =>
-    '<div class="roster-item" style="cursor:pointer" onclick="pickWorker(\'' + attrJsStr(name) + '\')">' +
-      '<span class="name">' + esc(name) + '</span>' +
-      '<button>追加</button>' +
+    '<div class="roster-item">' +
+      '<span class="name" style="cursor:pointer" onclick="pickWorker(\'' + attrJsStr(name) + '\')">' + esc(name) + '</span>' +
+      '<span style="display:flex;gap:6px">' +
+        '<button onclick="pickWorker(\'' + attrJsStr(name) + '\')">追加</button>' +
+        '<button title="今後この一覧に出さない(営業職など)" onclick="excludeKintaiName(\'' + attrJsStr(name) + '\')" style="color:#9ca3af">🚫</button>' +
+      '</span>' +
     '</div>'
   ).join('');
 }
@@ -420,6 +438,15 @@ function submitManualWorker(){
   const name = input.value.trim();
   if(!name) return;
   pickWorker(name);
+}
+
+async function excludeKintaiName(name){
+  if(!confirm('「' + name + '」を今後この作業員選択画面に表示しないようにします。よろしいですか?(いつでも「作業員・現場を管理」から戻せます)')) return;
+  const res = await postAction({action:'addKintaiExclude', name});
+  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'除外に失敗しました')); return; }
+  kintaiExcludeSet.add(name);
+  renderWorkerPicker();
+  showToast('🚫 「' + name + '」を除外しました');
 }
 
 // ─────────────────────────────────────────
@@ -553,6 +580,7 @@ function closeManage(){
 function loadRoster(){
   document.getElementById('worker-roster').innerHTML = '<div class="loading">読み込み中…</div>';
   document.getElementById('site-roster').innerHTML = '';
+  document.getElementById('kintai-exclude-roster').innerHTML = '<div class="loading">読み込み中…</div>';
   fetch(GAS_URL + '?action=getRosterData')
     .then(r => r.json())
     .then(res => {
@@ -560,6 +588,25 @@ function loadRoster(){
       renderRoster(res.workers || [], res.sites || []);
     })
     .catch(() => showToast('⚠️ 読み込みに失敗しました'));
+  loadKintaiExcludeList().then(renderKintaiExcludeRoster);
+}
+
+function renderKintaiExcludeRoster(){
+  const names = [...(kintaiExcludeSet || [])];
+  document.getElementById('kintai-exclude-roster').innerHTML = names.map(name =>
+    '<div class="roster-item">'
+      + '<span class="name">' + esc(name) + '</span>'
+      + '<button class="inactive" onclick="restoreKintaiName(\'' + attrJsStr(name) + '\')">候補に戻す</button>'
+      + '</div>'
+  ).join('') || '<div style="font-size:12px;color:#9ca3af;padding:8px">除外されている人はいません</div>';
+}
+
+async function restoreKintaiName(name){
+  const res = await postAction({action:'removeKintaiExclude', name});
+  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'解除に失敗しました')); return; }
+  kintaiExcludeSet.delete(name);
+  renderKintaiExcludeRoster();
+  showToast('✅ 「' + name + '」を候補に戻しました');
 }
 
 function renderRoster(workers, sites){
