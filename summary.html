@@ -19,7 +19,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
 .field{margin-bottom:10px}
 label{font-size:12px;color:#6b7280;margin-bottom:4px;display:block;font-weight:500}
-input[type=date]{width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;color:#1a1a1a;background:#fff;-webkit-appearance:none}
+input[type=date],select{width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;color:#1a1a1a;background:#fff;-webkit-appearance:none}
 input:focus{outline:none;border-color:#1d6fcf}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
@@ -62,6 +62,10 @@ input:focus{outline:none;border-color:#1d6fcf}
       <button class="preset-btn" onclick="setPreset('lastMonth')">先月</button>
       <button class="preset-btn" onclick="setPreset('all')">全期間</button>
     </div>
+    <div class="field">
+      <label>現場(絞り込み。選ぶとその現場内の作業員別の内訳が見られます)</label>
+      <select id="site-input"><option value="">(全現場の合計を表示)</option></select>
+    </div>
     <button class="btn-run" id="run-btn" onclick="runSummary()">集計する</button>
   </div>
 
@@ -103,17 +107,38 @@ function setPreset(kind){
 
 window.onload = () => {
   setPreset('thisMonth');
+  loadSiteOptions();
 };
+
+function loadSiteOptions(){
+  fetch(GAS_URL + '?action=getRosterData')
+    .then(r => r.json())
+    .then(res => {
+      const sites = (res.sites || []).map(s => s.name);
+      const sel = document.getElementById('site-input');
+      sites.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(() => {});
+}
 
 function runSummary(){
   const from = document.getElementById('from-input').value;
   const to = document.getElementById('to-input').value;
+  const site = document.getElementById('site-input').value;
   if(!from || !to) return;
   const btn = document.getElementById('run-btn');
   btn.disabled = true;
   document.getElementById('result').innerHTML = '<div class="loading">集計中…</div>';
 
-  fetch(GAS_URL + '?action=getSummary&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to))
+  let url = GAS_URL + '?action=getSummary&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to);
+  if(site) url += '&site=' + encodeURIComponent(site);
+
+  fetch(url)
     .then(r => r.json())
     .then(res => {
       if(res.status !== 'ok'){
@@ -125,10 +150,14 @@ function runSummary(){
         document.getElementById('result').innerHTML = '<div class="empty-state">この期間の配置データがありません</div>';
         return;
       }
+      const icon = res.site ? '👷' : '🏗️';
+      const heading = res.site
+        ? '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px">「' + esc(res.site) + '」の作業員別内訳</div>'
+        : '';
       const rows = totals.map(t =>
-        '<div class="result-row"><span class="name">🏗️ ' + esc(t.name) + '</span><span class="count">' + t.count + ' 人日</span></div>'
+        '<div class="result-row"><span class="name">' + icon + ' ' + esc(t.name) + '</span><span class="count">' + t.count + ' 人日</span></div>'
       ).join('');
-      document.getElementById('result').innerHTML = rows +
+      document.getElementById('result').innerHTML = heading + rows +
         '<div class="result-total"><span>合計</span><span>' + res.grandTotal + ' 人日</span></div>';
     })
     .catch(() => {
