@@ -28,6 +28,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 .date-select-wrap{margin-top:8px}
 .date-select-wrap select{padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;color:#1a1a1a;background:#fff;-webkit-appearance:none;max-width:220px}
+
+.attach-toggle{margin-top:10px;padding:8px 10px;background:#f0f2f5;color:#374151;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;width:100%;text-align:left}
+.attach-panel{display:none;margin-top:8px}
+.attach-panel.show{display:block}
+.attach-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;margin-bottom:6px}
+.attach-photo-grid a{display:block;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb}
+.attach-photo-grid img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}
+.attach-doc-list{display:flex;flex-direction:column;gap:6px}
+.attach-doc-item{display:flex;align-items:center;gap:6px;padding:7px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;color:#374151;text-decoration:none}
 </style>
 </head>
 <body>
@@ -46,6 +55,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxaoCk1BJTOFXgbmU7nvT4GuX-bgdqH3UOUhPduwr_ngsvum50InXWs5KTyNRVUwAoD/exec';
+// 現場情報管理システム(別アプリ)の現場情報(写真・書類など)を読み取り専用で参照する
+const GENBA_GAS_URL = 'https://script.google.com/macros/s/AKfycby9b1XxHyum6h_k50ki3kFLDrauDAEXPXAq5GwzSXcr61A9DpvRlf5q3nLCYSYlO9_j/exec';
 
 function esc(s){
   return String(s||'')
@@ -86,12 +97,51 @@ function fetchSiteTotals(){
     .catch(() => ({}));
 }
 
+function driveThumbUrl(driveUrl){
+  const m = String(driveUrl||'').match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return m ? ('https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w300') : '';
+}
+
+function fetchGenbaAttachments(){
+  // 現場情報管理システムに登録されている写真・書類の一覧(現場名ごと)
+  return fetch(GENBA_GAS_URL + '?action=getSites')
+    .then(r => r.json())
+    .then(res => {
+      const map = {};
+      (res.sites || []).forEach(s => {
+        map[s.name] = {photos: s.photos || [], docs: s.docs || []};
+      });
+      return map;
+    })
+    .catch(() => ({}));
+}
+
+let attachSeq = 0;
+function toggleAttach(id){
+  document.getElementById(id).classList.toggle('show');
+}
+
+function renderAttachPanel(site, attachments){
+  const info = attachments[site.name];
+  if(!info || (info.photos.length === 0 && info.docs.length === 0)) return '';
+  const id = 'attach-' + (attachSeq++);
+  const photoGrid = info.photos.length === 0 ? '' : '<div class="attach-photo-grid">' +
+    info.photos.map(p => '<a href="' + esc(p.url) + '" target="_blank"><img src="' + esc(driveThumbUrl(p.url)) + '" loading="lazy"></a>').join('') +
+    '</div>';
+  const docList = info.docs.length === 0 ? '' : '<div class="attach-doc-list">' +
+    info.docs.map(d => '<a class="attach-doc-item" href="' + esc(d.url) + '" target="_blank">📄 ' + esc(d.name) + '</a>').join('') +
+    '</div>';
+  const label = '📎 写真・書類を見る(写真' + info.photos.length + '枚 / 書類' + info.docs.length + '件)';
+  return '<button class="attach-toggle" onclick="toggleAttach(\'' + id + '\')">' + label + '</button>' +
+    '<div class="attach-panel" id="' + id + '">' + photoGrid + docList + '</div>';
+}
+
 function loadDate(dateParam){
   const url = GAS_URL + '?action=getShareData' + (dateParam ? '&date=' + encodeURIComponent(dateParam) : '');
   document.getElementById('content').innerHTML = '<div class="loading">読み込み中…</div>';
 
-  Promise.all([fetch(url).then(r => r.json()), fetchSiteTotals()])
-    .then(([res, siteTotals]) => {
+  Promise.all([fetch(url).then(r => r.json()), fetchSiteTotals(), fetchGenbaAttachments()])
+    .then(([res, siteTotals, attachments]) => {
       if(res.status !== 'ok'){
         document.getElementById('date-label').textContent = 'エラー';
         document.getElementById('content').innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
@@ -122,6 +172,7 @@ function loadDate(dateParam){
         return '<div class="site-card">'
           + '<div class="site-name"><span>🏗️ ' + esc(site.name) + '</span><span class="site-count">(累計' + total + '人工)</span></div>'
           + '<div class="worker-tags">' + tags + '</div>'
+          + renderAttachPanel(site, attachments)
           + '</div>';
       }).join('');
     })
