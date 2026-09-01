@@ -60,6 +60,8 @@ input:focus{outline:none;border-color:#1d6fcf}
     <div class="preset-row">
       <button class="preset-btn" onclick="setPreset('thisMonth')">今月</button>
       <button class="preset-btn" onclick="setPreset('lastMonth')">先月</button>
+      <button class="preset-btn" onclick="setPreset('thisYear')">今年</button>
+      <button class="preset-btn" onclick="setPreset('lastYear')">去年</button>
       <button class="preset-btn" onclick="setPreset('all')">全期間</button>
     </div>
     <div class="field">
@@ -98,6 +100,12 @@ function setPreset(kind){
     const lastMonthStart = new Date(today.getFullYear(), today.getMonth()-1, 1);
     document.getElementById('from-input').value = toDateStr(lastMonthStart);
     document.getElementById('to-input').value = toDateStr(lastMonthEnd);
+  }else if(kind === 'thisYear'){
+    document.getElementById('from-input').value = toDateStr(new Date(today.getFullYear(), 0, 1));
+    document.getElementById('to-input').value = toDateStr(today);
+  }else if(kind === 'lastYear'){
+    document.getElementById('from-input').value = toDateStr(new Date(today.getFullYear()-1, 0, 1));
+    document.getElementById('to-input').value = toDateStr(new Date(today.getFullYear()-1, 11, 31));
   }else if(kind === 'all'){
     document.getElementById('from-input').value = '2000-01-01';
     document.getElementById('to-input').value = toDateStr(new Date(today.getFullYear()+1, 11, 31));
