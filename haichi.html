@@ -131,6 +131,10 @@ input:focus{outline:none;border-color:#1d6fcf}
         <label>絞り込み</label>
         <input type="text" id="worker-picker-filter" placeholder="氏名で検索" oninput="renderWorkerPicker()">
       </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;margin-bottom:10px;cursor:pointer">
+        <input type="checkbox" id="worker-picker-show-dup" onchange="renderWorkerPicker()" style="width:auto">
+        他の現場に配置済みの作業員も表示する(掛け持ちの場合)
+      </label>
       <div id="worker-picker-list"><div class="loading">読み込み中…</div></div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
         <div class="inline-add">
@@ -332,6 +336,9 @@ function openWorkerPicker(siteIdx){
   document.getElementById('worker-picker-overlay').classList.add('show');
   document.getElementById('worker-picker-filter').value = '';
   document.getElementById('new-worker-manual-name').value = '';
+  const dupCheckbox = document.getElementById('worker-picker-show-dup');
+  dupCheckbox.checked = false;
+  dupCheckbox.closest('label').style.display = (workerPickerTargetSiteIdx === null) ? 'none' : 'flex';
   if(kintaiEmployees === null){
     loadKintaiEmployees();
   }else{
@@ -363,10 +370,19 @@ function renderWorkerPicker(){
   const listEl = document.getElementById('worker-picker-list');
   if(!listEl) return;
   const filterText = (document.getElementById('worker-picker-filter').value || '').trim();
-  // 現場に割り当てる場合はその現場に既にチェック済みの人を、名簿登録のみの場合は既に在籍登録済みの人を除外
-  const already = workerPickerTargetSiteIdx !== null
-    ? new Set(currentSites[workerPickerTargetSiteIdx].workers)
-    : new Set(allWorkers);
+  const showDup = document.getElementById('worker-picker-show-dup').checked;
+  // 現場に割り当てる場合は、デフォルトでは「今日すでにどこかの現場に配置済みの人」を除外し、
+  // 重複配置を防ぐ(誤って同じ人を複数現場に入れてしまうのを防止)。
+  // 「掛け持ちの場合」チェックを入れると、他の現場に配置済みでも表示する(その現場だけ配置済みの人は除外したまま)。
+  let already;
+  if(workerPickerTargetSiteIdx === null){
+    already = new Set(allWorkers); // 名簿登録のみの場合は、既に在籍登録済みの人を除外
+  }else if(showDup){
+    already = new Set(currentSites[workerPickerTargetSiteIdx].workers);
+  }else{
+    already = new Set();
+    currentSites.forEach(s => s.workers.forEach(w => already.add(w)));
+  }
   let list = kintaiEmployees.filter(name => !already.has(name));
   if(filterText) list = list.filter(name => name.includes(filterText));
 
