@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="作業員配置">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>作業員配置(編集)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a1a;min-height:100vh}
+
+.header{background:#fff;padding:12px 16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 4px rgba(0,0,0,.1);position:sticky;top:0;z-index:100}
+.header-left .title{font-size:17px;font-weight:700;display:flex;align-items:center;gap:6px}
+.header-left .sub{font-size:11px;color:#888;margin-top:2px}
+
+.content{padding:12px;max-width:600px;margin:0 auto}
+
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.field{margin-bottom:10px}
+label{font-size:12px;color:#6b7280;margin-bottom:4px;display:block;font-weight:500}
+input[type=text],input[type=date]{width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;color:#1a1a1a;background:#fff;-webkit-appearance:none}
+input:focus{outline:none;border-color:#1d6fcf}
+
+.btn-new{width:100%;padding:12px;background:#22c55e;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-save{width:100%;padding:14px;background:#1d6fcf;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px}
+.btn-save:disabled{background:#93c5fd;cursor:not-allowed}
+.btn-manage{width:100%;padding:10px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px}
+
+.site-card{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.site-name{font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:10px}
+.worker-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.worker-chip{display:flex;align-items:center;gap:5px;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:20px;font-size:13px;cursor:pointer;user-select:none;background:#fff}
+.worker-chip.checked{border-color:#1d6fcf;background:#eff6ff;color:#1d6fcf;font-weight:600}
+.worker-chip input{display:none}
+.inline-add{display:flex;gap:6px}
+.inline-add input{flex:1;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px}
+.inline-add button{padding:8px 12px;background:#f0f2f5;color:#374151;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+
+.empty-state{text-align:center;padding:40px 20px;color:#9ca3af}
+.loading{text-align:center;padding:32px;color:#9ca3af;font-size:13px}
+
+.share-box{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:14px;margin-top:12px;display:none}
+.share-box.show{display:block}
+.share-box .lbl{font-size:12px;color:#1d6fcf;font-weight:700;margin-bottom:6px}
+.share-box .url{font-size:12px;color:#374151;word-break:break-all;margin-bottom:8px}
+.share-box button{padding:8px 14px;background:#1d6fcf;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
+
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;overflow-y:auto}
+.overlay.show{display:block}
+.panel{background:#f0f2f5;min-height:100%;padding:12px}
+.panel-header{background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+.panel-title{font-size:16px;font-weight:700}
+.btn-close{padding:6px 14px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer}
+.roster-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#fff;border-radius:10px;margin-bottom:6px}
+.roster-item .name{font-size:13px;font-weight:600}
+.roster-item .status{font-size:11px;color:#9ca3af;margin-left:6px}
+.roster-item button{padding:6px 10px;border:1.5px solid #e5e7eb;border-radius:7px;background:#fff;font-size:11px;font-weight:600;cursor:pointer}
+.roster-item button.active{color:#ef4444;border-color:#fca5a5}
+.roster-item button.inactive{color:#16a34a;border-color:#86efac}
+.roster-section-title{font-size:13px;font-weight:700;color:#374151;margin:14px 0 6px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="title">🧑‍🔧 作業員配置(編集)</div>
+    <div class="sub" id="sync-label">読み込み中…</div>
+  </div>
+</div>
+
+<div class="content">
+  <div class="card">
+    <div class="field">
+      <label>配置する日付</label>
+      <input type="date" id="date-input" onchange="loadEditData()">
+    </div>
+  </div>
+
+  <button class="btn-manage" onclick="openManage()">⚙️ 作業員・現場を管理</button>
+
+  <button class="btn-new" onclick="addSitePrompt()">＋ 新しい現場を追加</button>
+
+  <div id="sites-list"><div class="loading">読み込み中…</div></div>
+
+  <button class="btn-save" id="save-btn" onclick="save()">保存する</button>
+
+  <div class="share-box" id="share-box">
+    <div class="lbl">📎 共有リンク(LINEなどに貼ってください)</div>
+    <div class="url" id="share-url"></div>
+    <button onclick="copyShareUrl()">リンクをコピー</button>
+  </div>
+</div>
+
+<!-- 管理モーダル -->
+<div class="overlay" id="manage-overlay">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">作業員・現場を管理</div>
+      <button class="btn-close" onclick="closeManage()">✕ 閉じる</button>
+    </div>
+
+    <div class="card">
+      <div class="roster-section-title">👷 作業員</div>
+      <div id="worker-roster"></div>
+      <div class="inline-add" style="margin-top:8px">
+        <input type="text" id="new-worker-name" placeholder="新しい作業員名">
+        <button onclick="submitAddWorker()">追加</button>
+      </div>
+
+      <div class="roster-section-title">🏗️ 現場</div>
+      <div id="site-roster"></div>
+      <div class="inline-add" style="margin-top:8px">
+        <input type="text" id="new-site-name" placeholder="新しい現場名">
+        <button onclick="submitAddSite()">追加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxaoCk1BJTOFXgbmU7nvT4GuX-bgdqH3UOUhPduwr_ngsvum50InXWs5KTyNRVUwAoD/exec';
+const SHARE_URL = 'https://hs1962tnk.github.io/worker-assignment/share.html';
+
+let currentSites = [];   // [{name, workers:[...]}]
+let allWorkers   = [];   // ['氏名', ...]
+
+function esc(s){
+  return String(s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// onclick="fn('...')" のようにHTML属性内のJS文字列リテラルへ安全に埋め込むためのエスケープ
+function attrJsStr(s){
+  return esc(String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+}
+
+function showToast(msg, dur=2800){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+function tomorrowStr(){
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return y + '-' + m + '-' + day;
+}
+
+window.onload = () => {
+  document.getElementById('date-input').value = tomorrowStr();
+  loadEditData();
+};
+
+function loadEditData(){
+  const date = document.getElementById('date-input').value;
+  if(!date) return;
+  document.getElementById('sites-list').innerHTML = '<div class="loading">読み込み中…</div>';
+  document.getElementById('share-box').classList.remove('show');
+
+  fetch(GAS_URL + '?action=getEditData&date=' + encodeURIComponent(date))
+    .then(r => r.json())
+    .then(res => {
+      if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'読み込み失敗')); return; }
+      currentSites = res.sites || [];
+      allWorkers   = res.allWorkers || [];
+      renderSites();
+      document.getElementById('sync-label').textContent = date + ' の配置を編集中';
+    })
+    .catch(() => showToast('⚠️ 読み込みに失敗しました(オフラインの可能性)'));
+}
+
+function renderSites(){
+  const wrap = document.getElementById('sites-list');
+  if(currentSites.length === 0){
+    wrap.innerHTML = '<div class="empty-state">現場が登録されていません。<br>「＋ 新しい現場を追加」から登録してください。</div>';
+    return;
+  }
+  wrap.innerHTML = currentSites.map((site, i) => {
+    const chips = allWorkers.map(w => {
+      const checked = site.workers.includes(w);
+      return '<label class="worker-chip' + (checked ? ' checked' : '') + '">'
+        + '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleWorker(' + i + ',\'' + attrJsStr(w) + '\',this.checked)">'
+        + esc(w) + '</label>';
+    }).join('');
+    return '<div class="site-card">'
+      + '<div class="site-name">🏗️ ' + esc(site.name) + '</div>'
+      + '<div class="worker-list">' + (chips || '<span style="font-size:12px;color:#9ca3af">登録済みの作業員がいません</span>') + '</div>'
+      + '<div class="inline-add">'
+      + '<input type="text" id="new-worker-' + i + '" placeholder="新しい作業員をこの現場に追加">'
+      + '<button onclick="addWorkerAndAssign(' + i + ')">追加</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function toggleWorker(siteIdx, name, checked){
+  const site = currentSites[siteIdx];
+  const idx = site.workers.indexOf(name);
+  if(checked && idx === -1) site.workers.push(name);
+  if(!checked && idx !== -1) site.workers.splice(idx, 1);
+  renderSites();
+}
+
+async function addWorkerAndAssign(siteIdx){
+  const input = document.getElementById('new-worker-' + siteIdx);
+  const name = input.value.trim();
+  if(!name) return;
+  const res = await postAction({action:'addWorker', name});
+  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
+  if(!allWorkers.includes(name)) allWorkers.push(name);
+  if(!currentSites[siteIdx].workers.includes(name)) currentSites[siteIdx].workers.push(name);
+  renderSites();
+  showToast('✅ 「' + name + '」を追加しました');
+}
+
+function addSitePrompt(){
+  const name = prompt('新しい現場名を入力してください');
+  if(!name || !name.trim()) return;
+  postAction({action:'addSite', name: name.trim()}).then(res => {
+    if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
+    currentSites.push({name: name.trim(), workers: []});
+    renderSites();
+    showToast('✅ 現場を追加しました');
+  });
+}
+
+async function save(){
+  const date = document.getElementById('date-input').value;
+  if(!date){ showToast('❌ 日付を選択してください'); return; }
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  btn.textContent = '保存中…';
+  try{
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({action:'saveAssignments', date, assignments: currentSites})
+    }).then(r => r.json());
+    if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'保存に失敗しました')); return; }
+    showToast('✅ 保存しました');
+    document.getElementById('share-url').textContent = SHARE_URL;
+    document.getElementById('share-box').classList.add('show');
+  }catch(e){
+    showToast('⚠️ 送信失敗(オフラインの可能性)');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = '保存する';
+  }
+}
+
+function copyShareUrl(){
+  navigator.clipboard.writeText(SHARE_URL).then(() => {
+    showToast('📋 コピーしました');
+  }).catch(() => {
+    showToast('❌ コピーに失敗しました');
+  });
+}
+
+async function postAction(payload){
+  try{
+    return await fetch(GAS_URL, {method:'POST', body: JSON.stringify(payload)}).then(r => r.json());
+  }catch(e){
+    return {status:'error', message:'通信に失敗しました'};
+  }
+}
+
+// ─────────────────────────────────────────
+// 管理モーダル(在籍/退職・稼働中/終了の切り替え)
+// ─────────────────────────────────────────
+function openManage(){
+  document.getElementById('manage-overlay').classList.add('show');
+  loadRoster();
+}
+function closeManage(){
+  document.getElementById('manage-overlay').classList.remove('show');
+}
+
+function loadRoster(){
+  document.getElementById('worker-roster').innerHTML = '<div class="loading">読み込み中…</div>';
+  document.getElementById('site-roster').innerHTML = '';
+  fetch(GAS_URL + '?action=getRosterData')
+    .then(r => r.json())
+    .then(res => {
+      if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'読み込み失敗')); return; }
+      renderRoster(res.workers || [], res.sites || []);
+    })
+    .catch(() => showToast('⚠️ 読み込みに失敗しました'));
+}
+
+function renderRoster(workers, sites){
+  document.getElementById('worker-roster').innerHTML = workers.map(w => {
+    const active = w.status === '在籍';
+    return '<div class="roster-item">'
+      + '<span><span class="name">' + esc(w.name) + '</span><span class="status">' + esc(w.status) + '</span></span>'
+      + '<button class="' + (active ? 'active' : 'inactive') + '" onclick="toggleWorkerStatus(\'' + attrJsStr(w.name) + '\',' + active + ')">'
+      + (active ? '退職にする' : '在籍に戻す') + '</button>'
+      + '</div>';
+  }).join('') || '<div style="font-size:12px;color:#9ca3af;padding:8px">登録された作業員がいません</div>';
+
+  document.getElementById('site-roster').innerHTML = sites.map(s => {
+    const active = s.status === '稼働中';
+    return '<div class="roster-item">'
+      + '<span><span class="name">' + esc(s.name) + '</span><span class="status">' + esc(s.status) + '</span></span>'
+      + '<button class="' + (active ? 'active' : 'inactive') + '" onclick="toggleSiteStatus(\'' + attrJsStr(s.name) + '\',' + active + ')">'
+      + (active ? '終了にする' : '稼働中に戻す') + '</button>'
+      + '</div>';
+  }).join('') || '<div style="font-size:12px;color:#9ca3af;padding:8px">登録された現場がありません</div>';
+}
+
+async function toggleWorkerStatus(name, currentlyActive){
+  const status = currentlyActive ? '退職' : '在籍';
+  const res = await postAction({action:'setWorkerStatus', name, status});
+  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'更新に失敗しました')); return; }
+  loadRoster();
+  loadEditData();
+}
+
+async function toggleSiteStatus(name, currentlyActive){
+  const status = currentlyActive ? '終了' : '稼働中';
+  const res = await postAction({action:'setSiteStatus', name, status});
+  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'更新に失敗しました')); return; }
+  loadRoster();
+  loadEditData();
+}
+
+async function submitAddWorker(){
+  const input = document.getElementById('new-worker-name');
+  const name = input.value.trim();
+  if(!name) return;
+  const res = await postAction({action:'addWorker', name});
+  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
+  input.value = '';
+  loadRoster();
+  loadEditData();
+}
+
+async function submitAddSite(){
+  const input = document.getElementById('new-site-name');
+  const name = input.value.trim();
+  if(!name) return;
+  const res = await postAction({action:'addSite', name});
+  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
+  input.value = '';
+  loadRoster();
+  loadEditData();
+}
+</script>
+</body>
+</html>
