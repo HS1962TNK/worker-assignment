@@ -198,7 +198,10 @@ function loadEditData(){
     .then(r => r.json())
     .then(res => {
       if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'読み込み失敗')); return; }
-      currentSites = res.sites || [];
+      const excluded = getExcludedSites(date);
+      // 「外す」済みで、かつ作業員が誰も割り当てられていない(=単なる候補の残骸)現場は表示しない。
+      // 実際に配置データが保存済みの現場は、除外設定に関わらず必ず表示する(データを隠さないため)。
+      currentSites = (res.sites || []).filter(s => !(excluded.has(s.name) && s.workers.length === 0));
       allWorkers   = res.allWorkers || [];
       renderSites();
       document.getElementById('sync-label').textContent = date + ' の配置を編集中';
@@ -212,18 +215,36 @@ function loadEditData(){
 // 現場情報管理システム側の着工日〜完了日が選択中の日付を含む現場を、
 // まだ追加されていなければ自動でカード化しておく(保存前提ではなく、
 // 作業員を1人もチェックしなければ保存対象にはならないので安全)。
+// 一度「外す」で除外した現場は、その日付では再提案しない(ブラウザに記憶)。
 // ─────────────────────────────────────────
+function excludedKey(date){ return 'haichi-excluded-' + date; }
+
+function getExcludedSites(date){
+  try{
+    return new Set(JSON.parse(localStorage.getItem(excludedKey(date)) || '[]'));
+  }catch(e){ return new Set(); }
+}
+
+function addExcludedSite(date, name){
+  try{
+    const set = getExcludedSites(date);
+    set.add(name);
+    localStorage.setItem(excludedKey(date), JSON.stringify([...set]));
+  }catch(e){}
+}
+
 async function autoSuggestSites(date){
   if(genbaSites === null){
     await loadGenbaSites();
   }
   if(!genbaSites || genbaSites.length === 0) return;
 
-  const already = new Set(currentSites.map(s => s.name));
+  const already   = new Set(currentSites.map(s => s.name));
+  const excluded  = getExcludedSites(date);
   const candidates = genbaSites.filter(s =>
     s.startDate && s.endDate &&
     s.startDate <= date && date <= s.endDate &&
-    !already.has(s.name)
+    !already.has(s.name) && !excluded.has(s.name)
   );
   if(candidates.length === 0) return;
 
@@ -233,6 +254,18 @@ async function autoSuggestSites(date){
   }
   renderSites();
   showToast('📌 工期内の現場を' + candidates.length + '件、候補に追加しました');
+}
+
+function removeSite(i){
+  const site = currentSites[i];
+  if(!site) return;
+  if(site.workers.length > 0 && !confirm('「' + site.name + '」はチェック済みの作業員がいます。外してよろしいですか?')) return;
+
+  const date = document.getElementById('date-input').value;
+  addExcludedSite(date, site.name);
+  currentSites.splice(i, 1);
+  renderSites();
+  showToast('現場「' + site.name + '」を今日の候補から外しました');
 }
 
 function renderSites(){
@@ -249,7 +282,10 @@ function renderSites(){
         + esc(w) + '</label>';
     }).join('');
     return '<div class="site-card">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
       + '<div class="site-name">🏗️ ' + esc(site.name) + '</div>'
+      + '<button onclick="removeSite(' + i + ')" style="flex-shrink:0;padding:4px 10px;background:#fff;color:#ef4444;border:1.5px solid #fca5a5;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer">✕ 外す</button>'
+      + '</div>'
       + '<div class="worker-list">' + (chips || '<span style="font-size:12px;color:#9ca3af">登録済みの作業員がいません</span>') + '</div>'
       + '<div class="inline-add">'
       + '<input type="text" id="new-worker-' + i + '" placeholder="新しい作業員をこの現場に追加">'
