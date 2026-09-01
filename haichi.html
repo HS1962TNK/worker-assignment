@@ -119,6 +119,29 @@ input:focus{outline:none;border-color:#1d6fcf}
   </div>
 </div>
 
+<!-- 作業員選択モーダル(勤怠管理アプリの従業員一覧から選ぶ) -->
+<div class="overlay" id="worker-picker-overlay">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">作業員を選択</div>
+      <button class="btn-close" onclick="closeWorkerPicker()">✕ 閉じる</button>
+    </div>
+    <div class="card">
+      <div class="field">
+        <label>絞り込み</label>
+        <input type="text" id="worker-picker-filter" placeholder="氏名で検索" oninput="renderWorkerPicker()">
+      </div>
+      <div id="worker-picker-list"><div class="loading">読み込み中…</div></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
+        <div class="inline-add">
+          <input type="text" id="new-worker-manual-name" placeholder="勤怠管理に無い作業員は直接入力">
+          <button onclick="submitManualWorker()">追加</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 管理モーダル -->
 <div class="overlay" id="manage-overlay">
   <div class="panel">
@@ -130,10 +153,7 @@ input:focus{outline:none;border-color:#1d6fcf}
     <div class="card">
       <div class="roster-section-title">👷 作業員</div>
       <div id="worker-roster"></div>
-      <div class="inline-add" style="margin-top:8px">
-        <input type="text" id="new-worker-name" placeholder="新しい作業員名">
-        <button onclick="submitAddWorker()">追加</button>
-      </div>
+      <button onclick="openWorkerPicker(null)" style="width:100%;padding:8px;margin-top:8px;background:#f0f2f5;color:#374151;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">＋ 作業員を選択</button>
 
       <div class="roster-section-title">🏗️ 現場</div>
       <div id="site-roster"></div>
@@ -152,6 +172,8 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxaoCk1BJTOFXgbmU7nvT4G
 const SHARE_URL = 'https://hs1962tnk.github.io/worker-assignment/share.html';
 // 現場情報管理システム(別アプリ)の現場一覧を「現場を選択」画面で読み取り専用に参照する
 const GENBA_GAS_URL = 'https://script.google.com/macros/s/AKfycby9b1XxHyum6h_k50ki3kFLDrauDAEXPXAq5GwzSXcr61A9DpvRlf5q3nLCYSYlO9_j/exec';
+// 勤怠管理アプリ(別アプリ)の従業員一覧を「作業員を選択」画面で読み取り専用に参照する
+const KINTAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbzGERUUaxB3zb4CM9m6z7Ca3BiVJzi9DtYhaVq-ekmbi8sZzdEjqQeogqn1yavvKXmRdg/exec';
 
 let currentSites = [];   // [{name, workers:[...]}]
 let allWorkers   = [];   // ['氏名', ...]
@@ -287,10 +309,7 @@ function renderSites(){
       + '<button onclick="removeSite(' + i + ')" style="flex-shrink:0;padding:4px 10px;background:#fff;color:#ef4444;border:1.5px solid #fca5a5;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer">✕ 外す</button>'
       + '</div>'
       + '<div class="worker-list">' + (chips || '<span style="font-size:12px;color:#9ca3af">登録済みの作業員がいません</span>') + '</div>'
-      + '<div class="inline-add">'
-      + '<input type="text" id="new-worker-' + i + '" placeholder="新しい作業員をこの現場に追加">'
-      + '<button onclick="addWorkerAndAssign(' + i + ')">追加</button>'
-      + '</div>'
+      + '<button onclick="openWorkerPicker(' + i + ')" style="width:100%;padding:8px;background:#f0f2f5;color:#374151;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">＋ 作業員を選択</button>'
       + '</div>';
   }).join('');
 }
@@ -303,16 +322,89 @@ function toggleWorker(siteIdx, name, checked){
   renderSites();
 }
 
-async function addWorkerAndAssign(siteIdx){
-  const input = document.getElementById('new-worker-' + siteIdx);
+// ─────────────────────────────────────────
+// 作業員選択(勤怠管理アプリの従業員一覧から選ぶ)
+// ─────────────────────────────────────────
+let kintaiEmployees = null;      // 勤怠管理アプリ側の従業員一覧(キャッシュ、['氏名',...])
+let workerPickerTargetSiteIdx = null; // 選んだ作業員をどの現場カードに割り当てるか(nullなら名簿登録のみ)
+
+function openWorkerPicker(siteIdx){
+  workerPickerTargetSiteIdx = (typeof siteIdx === 'number') ? siteIdx : null;
+  document.getElementById('worker-picker-overlay').classList.add('show');
+  document.getElementById('worker-picker-filter').value = '';
+  document.getElementById('new-worker-manual-name').value = '';
+  if(kintaiEmployees === null){
+    loadKintaiEmployees();
+  }else{
+    renderWorkerPicker();
+  }
+}
+function closeWorkerPicker(){
+  document.getElementById('worker-picker-overlay').classList.remove('show');
+}
+
+function loadKintaiEmployees(){
+  const listEl = document.getElementById('worker-picker-list');
+  if(listEl) listEl.innerHTML = '<div class="loading">勤怠管理アプリから取得中…</div>';
+  return fetch(KINTAI_GAS_URL + '?action=getEmployees')
+    .then(r => r.json())
+    .then(res => {
+      kintaiEmployees = (res.employees || []).map(e => e.name).filter(Boolean);
+      renderWorkerPicker();
+    })
+    .catch(() => {
+      kintaiEmployees = [];
+      if(listEl) listEl.innerHTML =
+        '<div style="font-size:12px;color:#ef4444;padding:8px">勤怠管理アプリから取得できませんでした。下の欄から直接入力してください。</div>';
+    });
+}
+
+function renderWorkerPicker(){
+  if(kintaiEmployees === null) return;
+  const listEl = document.getElementById('worker-picker-list');
+  if(!listEl) return;
+  const filterText = (document.getElementById('worker-picker-filter').value || '').trim();
+  // 現場に割り当てる場合はその現場に既にチェック済みの人を、名簿登録のみの場合は既に在籍登録済みの人を除外
+  const already = workerPickerTargetSiteIdx !== null
+    ? new Set(currentSites[workerPickerTargetSiteIdx].workers)
+    : new Set(allWorkers);
+  let list = kintaiEmployees.filter(name => !already.has(name));
+  if(filterText) list = list.filter(name => name.includes(filterText));
+
+  if(list.length === 0){
+    listEl.innerHTML = '<div style="font-size:12px;color:#9ca3af;padding:8px">' +
+      (kintaiEmployees.length === 0 ? '勤怠管理アプリに作業員が登録されていません。' : '該当する作業員がいません(すでに追加済みかもしれません)。') +
+      '</div>';
+    return;
+  }
+  listEl.innerHTML = list.map(name =>
+    '<div class="roster-item" style="cursor:pointer" onclick="pickWorker(\'' + attrJsStr(name) + '\')">' +
+      '<span class="name">' + esc(name) + '</span>' +
+      '<button>追加</button>' +
+    '</div>'
+  ).join('');
+}
+
+function pickWorker(name){
+  postAction({action:'addWorker', name}).then(res => {
+    if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
+    if(!allWorkers.includes(name)) allWorkers.push(name);
+    if(workerPickerTargetSiteIdx !== null){
+      const site = currentSites[workerPickerTargetSiteIdx];
+      if(site && !site.workers.includes(name)) site.workers.push(name);
+    }
+    renderSites();
+    closeWorkerPicker();
+    if(document.getElementById('manage-overlay').classList.contains('show')) loadRoster();
+    showToast('✅ 「' + name + '」を追加しました');
+  });
+}
+
+function submitManualWorker(){
+  const input = document.getElementById('new-worker-manual-name');
   const name = input.value.trim();
   if(!name) return;
-  const res = await postAction({action:'addWorker', name});
-  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
-  if(!allWorkers.includes(name)) allWorkers.push(name);
-  if(!currentSites[siteIdx].workers.includes(name)) currentSites[siteIdx].workers.push(name);
-  renderSites();
-  showToast('✅ 「' + name + '」を追加しました');
+  pickWorker(name);
 }
 
 // ─────────────────────────────────────────
@@ -487,17 +579,6 @@ async function toggleSiteStatus(name, currentlyActive){
   const status = currentlyActive ? '終了' : '稼働中';
   const res = await postAction({action:'setSiteStatus', name, status});
   if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'更新に失敗しました')); return; }
-  loadRoster();
-  loadEditData();
-}
-
-async function submitAddWorker(){
-  const input = document.getElementById('new-worker-name');
-  const name = input.value.trim();
-  if(!name) return;
-  const res = await postAction({action:'addWorker', name});
-  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
-  input.value = '';
   loadRoster();
   loadEditData();
 }
