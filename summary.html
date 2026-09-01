@@ -19,7 +19,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
 .field{margin-bottom:10px}
 label{font-size:12px;color:#6b7280;margin-bottom:4px;display:block;font-weight:500}
-input[type=date],select{width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;color:#1a1a1a;background:#fff;-webkit-appearance:none}
+input[type=date],input[type=text],select{width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;color:#1a1a1a;background:#fff;-webkit-appearance:none}
 input:focus{outline:none;border-color:#1d6fcf}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
@@ -65,8 +65,9 @@ input:focus{outline:none;border-color:#1d6fcf}
       <button class="preset-btn" onclick="setPreset('all')">全期間</button>
     </div>
     <div class="field">
-      <label>現場(絞り込み。選ぶとその現場内の作業員別の内訳が見られます)</label>
-      <select id="site-input" onchange="runSummary()"><option value="">全現場の合計を表示中(タップして現場を選択)</option></select>
+      <label>現場(絞り込み。入力して検索、選ぶとその現場内の作業員別の内訳が見られます)</label>
+      <input type="text" id="site-input" list="site-datalist" placeholder="全現場の合計を表示中(現場名を入力すると絞り込めます)" onchange="runSummary()">
+      <datalist id="site-datalist"></datalist>
     </div>
     <button class="btn-run" id="run-btn" onclick="runSummary()">集計する</button>
   </div>
@@ -123,12 +124,11 @@ function loadSiteOptions(){
     .then(r => r.json())
     .then(res => {
       const sites = (res.sites || []).map(s => s.name);
-      const sel = document.getElementById('site-input');
+      const list = document.getElementById('site-datalist');
       sites.forEach(name => {
         const opt = document.createElement('option');
         opt.value = name;
-        opt.textContent = name;
-        sel.appendChild(opt);
+        list.appendChild(opt);
       });
     })
     .catch(() => {});
