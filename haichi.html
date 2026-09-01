@@ -83,7 +83,7 @@ input:focus{outline:none;border-color:#1d6fcf}
 
   <button class="btn-manage" onclick="openManage()">⚙️ 作業員・現場を管理</button>
 
-  <button class="btn-new" onclick="addSitePrompt()">＋ 新しい現場を追加</button>
+  <button class="btn-new" onclick="openSitePicker()">＋ 新しい現場を追加</button>
 
   <div id="sites-list"><div class="loading">読み込み中…</div></div>
 
@@ -93,6 +93,29 @@ input:focus{outline:none;border-color:#1d6fcf}
     <div class="lbl">📎 共有リンク(LINEなどに貼ってください)</div>
     <div class="url" id="share-url"></div>
     <button onclick="copyShareUrl()">リンクをコピー</button>
+  </div>
+</div>
+
+<!-- 現場選択モーダル(現場情報管理システムの現場一覧から選ぶ) -->
+<div class="overlay" id="site-picker-overlay">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">現場を選択</div>
+      <button class="btn-close" onclick="closeSitePicker()">✕ 閉じる</button>
+    </div>
+    <div class="card">
+      <div class="field">
+        <label>絞り込み</label>
+        <input type="text" id="site-picker-filter" placeholder="現場名で検索" oninput="renderSitePicker()">
+      </div>
+      <div id="site-picker-list"><div class="loading">読み込み中…</div></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
+        <div class="inline-add">
+          <input type="text" id="new-site-manual-name" placeholder="現場情報管理に無い現場は直接入力">
+          <button onclick="submitManualSite()">追加</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -127,6 +150,8 @@ input:focus{outline:none;border-color:#1d6fcf}
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxaoCk1BJTOFXgbmU7nvT4GuX-bgdqH3UOUhPduwr_ngsvum50InXWs5KTyNRVUwAoD/exec';
 const SHARE_URL = 'https://hs1962tnk.github.io/worker-assignment/share.html';
+// 現場情報管理システム(別アプリ)の現場一覧を「現場を選択」画面で読み取り専用に参照する
+const GENBA_GAS_URL = 'https://script.google.com/macros/s/AKfycby9b1XxHyum6h_k50ki3kFLDrauDAEXPXAq5GwzSXcr61A9DpvRlf5q3nLCYSYlO9_j/exec';
 
 let currentSites = [];   // [{name, workers:[...]}]
 let allWorkers   = [];   // ['氏名', ...]
@@ -225,15 +250,77 @@ async function addWorkerAndAssign(siteIdx){
   showToast('✅ 「' + name + '」を追加しました');
 }
 
-function addSitePrompt(){
-  const name = prompt('新しい現場名を入力してください');
-  if(!name || !name.trim()) return;
-  postAction({action:'addSite', name: name.trim()}).then(res => {
+// ─────────────────────────────────────────
+// 現場選択(現場情報管理システムの現場一覧から選ぶ)
+// ─────────────────────────────────────────
+let genbaSites = null; // 現場情報管理システム側の現場一覧(キャッシュ)
+
+function openSitePicker(){
+  document.getElementById('site-picker-overlay').classList.add('show');
+  document.getElementById('site-picker-filter').value = '';
+  document.getElementById('new-site-manual-name').value = '';
+  if(genbaSites === null){
+    loadGenbaSites();
+  }else{
+    renderSitePicker();
+  }
+}
+function closeSitePicker(){
+  document.getElementById('site-picker-overlay').classList.remove('show');
+}
+
+function loadGenbaSites(){
+  document.getElementById('site-picker-list').innerHTML = '<div class="loading">現場情報管理システムから取得中…</div>';
+  fetch(GENBA_GAS_URL + '?action=getSites')
+    .then(r => r.json())
+    .then(res => {
+      genbaSites = (res.sites || []).map(s => s.name).filter(Boolean);
+      renderSitePicker();
+    })
+    .catch(() => {
+      genbaSites = [];
+      document.getElementById('site-picker-list').innerHTML =
+        '<div style="font-size:12px;color:#ef4444;padding:8px">現場情報管理システムから取得できませんでした。下の欄から直接入力してください。</div>';
+    });
+}
+
+function renderSitePicker(){
+  if(genbaSites === null) return;
+  const filterText = (document.getElementById('site-picker-filter').value || '').trim();
+  const already = new Set(currentSites.map(s => s.name));
+  let list = genbaSites.filter(name => !already.has(name));
+  if(filterText) list = list.filter(name => name.includes(filterText));
+
+  const wrap = document.getElementById('site-picker-list');
+  if(list.length === 0){
+    wrap.innerHTML = '<div style="font-size:12px;color:#9ca3af;padding:8px">' +
+      (genbaSites.length === 0 ? '現場情報管理システムに現場が登録されていません。' : '該当する現場がありません(すでに追加済みかもしれません)。') +
+      '</div>';
+    return;
+  }
+  wrap.innerHTML = list.map(name =>
+    '<div class="roster-item" style="cursor:pointer" onclick="pickSite(\'' + attrJsStr(name) + '\')">' +
+      '<span class="name">' + esc(name) + '</span>' +
+      '<button>追加</button>' +
+    '</div>'
+  ).join('');
+}
+
+function pickSite(name){
+  postAction({action:'addSite', name}).then(res => {
     if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
-    currentSites.push({name: name.trim(), workers: []});
+    currentSites.push({name, workers: []});
     renderSites();
-    showToast('✅ 現場を追加しました');
+    closeSitePicker();
+    showToast('✅ 「' + name + '」を追加しました');
   });
+}
+
+function submitManualSite(){
+  const input = document.getElementById('new-site-manual-name');
+  const name = input.value.trim();
+  if(!name) return;
+  pickSite(name);
 }
 
 async function save(){
