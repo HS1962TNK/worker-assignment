@@ -297,28 +297,27 @@ function renderSites(){
     return;
   }
   wrap.innerHTML = currentSites.map((site, i) => {
-    const chips = allWorkers.map(w => {
-      const checked = site.workers.includes(w);
-      return '<label class="worker-chip' + (checked ? ' checked' : '') + '">'
-        + '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleWorker(' + i + ',\'' + attrJsStr(w) + '\',this.checked)">'
-        + esc(w) + '</label>';
-    }).join('');
+    // このカードには「実際に配置されている作業員」だけを表示する(全カード共通の選択肢一覧は出さない)
+    const chips = site.workers.map(w =>
+      '<span class="worker-chip checked" style="cursor:pointer" title="クリックで外す" onclick="unassignWorker(' + i + ',\'' + attrJsStr(w) + '\')">'
+        + esc(w) + ' ✕</span>'
+    ).join('');
     return '<div class="site-card">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
       + '<div class="site-name">🏗️ ' + esc(site.name) + '</div>'
       + '<button onclick="removeSite(' + i + ')" style="flex-shrink:0;padding:4px 10px;background:#fff;color:#ef4444;border:1.5px solid #fca5a5;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer">✕ 外す</button>'
       + '</div>'
-      + '<div class="worker-list">' + (chips || '<span style="font-size:12px;color:#9ca3af">登録済みの作業員がいません</span>') + '</div>'
+      + '<div class="worker-list">' + (chips || '<span style="font-size:12px;color:#9ca3af">まだ誰も配置されていません</span>') + '</div>'
       + '<button onclick="openWorkerPicker(' + i + ')" style="width:100%;padding:8px;background:#f0f2f5;color:#374151;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">＋ 作業員を選択</button>'
       + '</div>';
   }).join('');
 }
 
-function toggleWorker(siteIdx, name, checked){
+function unassignWorker(siteIdx, name){
   const site = currentSites[siteIdx];
+  if(!site) return;
   const idx = site.workers.indexOf(name);
-  if(checked && idx === -1) site.workers.push(name);
-  if(!checked && idx !== -1) site.workers.splice(idx, 1);
+  if(idx !== -1) site.workers.splice(idx, 1);
   renderSites();
 }
 
