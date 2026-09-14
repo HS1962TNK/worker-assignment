@@ -21,6 +21,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .site-count{font-size:13px;font-weight:700;color:#1d6fcf}
 .worker-tags{display:flex;flex-wrap:wrap;gap:8px}
 .worker-tag{padding:7px 12px;background:#eff6ff;color:#1d6fcf;border-radius:20px;font-size:14px;font-weight:600}
+.worker-rows{display:flex;flex-direction:column;gap:6px}
+.worker-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.item-tag{padding:4px 10px;background:#fef3c7;color:#92400e;border-radius:14px;font-size:12px;font-weight:600}
 
 .empty-state{text-align:center;padding:60px 20px;color:#9ca3af}
 .empty-icon{font-size:48px;margin-bottom:12px}
@@ -167,11 +170,20 @@ function loadDate(dateParam){
       }
       document.getElementById('content').innerHTML = sites.map(site => {
         const workers = site.workers || [];
-        const tags = workers.map(w => '<span class="worker-tag">' + esc(w) + '</span>').join('');
+        const workerItems = site.workerItems || {};
+        // 追加項目が付いた作業員がいる現場は1人1行で項目を横に並べ、いなければ従来どおり名前を横に並べる
+        const hasItems = workers.some(w => (workerItems[w] || []).length > 0);
+        const body = hasItems
+          ? '<div class="worker-rows">' + workers.map(w =>
+              '<div class="worker-row"><span class="worker-tag">' + esc(w) + '</span>'
+              + (workerItems[w] || []).map(it => '<span class="item-tag">' + esc(it) + '</span>').join('')
+              + '</div>'
+            ).join('') + '</div>'
+          : '<div class="worker-tags">' + workers.map(w => '<span class="worker-tag">' + esc(w) + '</span>').join('') + '</div>';
         const total = siteTotals[site.name] || 0;
         return '<div class="site-card">'
           + '<div class="site-name"><span>🏗️ ' + esc(site.name) + '</span><span class="site-count">(累計' + total + '人工)</span></div>'
-          + '<div class="worker-tags">' + tags + '</div>'
+          + body
           + renderAttachPanel(site, attachments)
           + '</div>';
       }).join('');

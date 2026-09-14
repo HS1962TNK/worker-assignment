@@ -37,6 +37,17 @@ input:focus{outline:none;border-color:#1d6fcf}
 .inline-add input{flex:1;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px}
 .inline-add button{padding:8px 12px;background:#f0f2f5;color:#374151;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
 
+.worker-rows{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.worker-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:6px 8px;border:1.5px solid #bfdbfe;border-radius:10px;background:#f8fbff}
+.worker-row .wname{font-size:13px;font-weight:700;color:#1d6fcf}
+.worker-row .item-tags{display:flex;flex-wrap:wrap;gap:4px;flex:1;min-width:0}
+.worker-row .row-btn{padding:4px 8px;border:1.5px solid #e5e7eb;border-radius:7px;background:#fff;font-size:11px;font-weight:600;cursor:pointer;color:#374151;white-space:nowrap}
+.worker-row .row-btn.del{color:#ef4444;border-color:#fca5a5}
+.item-tag{padding:3px 8px;background:#fef3c7;color:#92400e;border-radius:12px;font-size:11px;font-weight:600}
+.item-choice-list{display:flex;flex-wrap:wrap;gap:8px}
+.item-choice{padding:7px 12px;border:1.5px solid #e5e7eb;border-radius:20px;font-size:13px;cursor:pointer;user-select:none;background:#fff}
+.item-choice.selected{border-color:#d97706;background:#fef3c7;color:#92400e;font-weight:600}
+
 .empty-state{text-align:center;padding:40px 20px;color:#9ca3af}
 .loading{text-align:center;padding:32px;color:#9ca3af;font-size:13px}
 
@@ -156,7 +167,35 @@ input:focus{outline:none;border-color:#1d6fcf}
           <button onclick="submitManualWorker()">追加</button>
         </div>
       </div>
+      <div id="worker-picker-items-section" style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
+        <label>🏷️ 追加項目(選んだ作業員全員に付けます。あとから1人ずつ変えることもできます)</label>
+        <div id="worker-picker-items"></div>
+        <div class="inline-add" style="margin-top:8px">
+          <input type="text" id="worker-picker-new-item" placeholder="リストに無い項目を登録">
+          <button onclick="submitNewItem('worker')">登録</button>
+        </div>
+      </div>
       <button class="btn-save" id="worker-picker-confirm-btn" onclick="confirmWorkerPicker()" style="margin-top:10px">追加する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 追加項目選択モーダル(作業員1人ぶんの項目を複数選ぶ) -->
+<div class="overlay" id="item-picker-overlay">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title" id="item-picker-title">追加項目を選択</div>
+      <button class="btn-close" onclick="closeItemPicker()">✕ 閉じる</button>
+    </div>
+    <div class="card">
+      <div id="item-picker-list"></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
+        <div class="inline-add">
+          <input type="text" id="item-picker-new-item" placeholder="リストに無い項目を登録">
+          <button onclick="submitNewItem('item')">登録</button>
+        </div>
+      </div>
+      <button class="btn-save" onclick="confirmItemPicker()" style="margin-top:10px">決定</button>
     </div>
   </div>
 </div>
@@ -181,6 +220,13 @@ input:focus{outline:none;border-color:#1d6fcf}
         <button onclick="submitAddSite()">追加</button>
       </div>
 
+      <div class="roster-section-title">🏷️ 追加項目(作業員ごとに選ぶ項目。スプレッドシートの「追加項目」シートに直接書き足してもOK)</div>
+      <div id="item-roster"></div>
+      <div class="inline-add" style="margin-top:8px">
+        <input type="text" id="manage-new-item" placeholder="新しい項目名">
+        <button onclick="submitNewItem('manage')">追加</button>
+      </div>
+
       <div class="roster-section-title">🚫 作業員選択画面から除外中(勤怠管理アプリの一覧のうち非表示にした人)</div>
       <div id="kintai-exclude-roster"></div>
     </div>
@@ -197,8 +243,9 @@ const GENBA_GAS_URL = 'https://script.google.com/macros/s/AKfycby9b1XxHyum6h_k50
 // 勤怠管理アプリ(別アプリ)の従業員一覧を「作業員を選択」画面で読み取り専用に参照する
 const KINTAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbzGERUUaxB3zb4CM9m6z7Ca3BiVJzi9DtYhaVq-ekmbi8sZzdEjqQeogqn1yavvKXmRdg/exec';
 
-let currentSites = [];   // [{name, workers:[...]}]
+let currentSites = [];   // [{name, workers:[...], workerItems:{氏名:[項目,...]}}]
 let allWorkers   = [];   // ['氏名', ...]
+let allItems     = [];   // 使用中の追加項目 ['項目名', ...](スプレッドシートの「追加項目」シートの並び順)
 
 function esc(s){
   return String(s||'')
@@ -246,7 +293,9 @@ function loadEditData(){
       // 「外す」済みで、かつ作業員が誰も割り当てられていない(=単なる候補の残骸)現場は表示しない。
       // 実際に配置データが保存済みの現場は、除外設定に関わらず必ず表示する(データを隠さないため)。
       currentSites = (res.sites || []).filter(s => !(excluded.has(s.name) && s.workers.length === 0));
+      currentSites.forEach(s => { s.workerItems = s.workerItems || {}; });
       allWorkers   = res.allWorkers || [];
+      allItems     = res.allItems || [];
       renderSites();
       document.getElementById('sync-label').textContent = date + ' の配置を編集中';
       return autoSuggestSites(date);
@@ -294,7 +343,7 @@ async function autoSuggestSites(date){
 
   for(const c of candidates){
     const res = await postAction({action:'addSite', name: c.name});
-    if(res.status === 'ok') currentSites.push({name: c.name, workers: []});
+    if(res.status === 'ok') currentSites.push({name: c.name, workers: [], workerItems: {}});
   }
   renderSites();
   showToast('📌 工期内の現場を' + candidates.length + '件、候補に追加しました');
@@ -320,16 +369,22 @@ function renderSites(){
   }
   wrap.innerHTML = currentSites.map((site, i) => {
     // このカードには「実際に配置されている作業員」だけを表示する(全カード共通の選択肢一覧は出さない)
-    const chips = site.workers.map(w =>
-      '<span class="worker-chip checked" style="cursor:pointer" title="クリックで外す" onclick="unassignWorker(' + i + ',\'' + attrJsStr(w) + '\')">'
-        + esc(w) + ' ✕</span>'
-    ).join('');
+    // 作業員1人ずつ、選んだ追加項目と「項目」「外す」ボタンを並べる
+    const rows = site.workers.map(w => {
+      const tags = (site.workerItems[w] || []).map(it => '<span class="item-tag">' + esc(it) + '</span>').join('');
+      return '<div class="worker-row">'
+        + '<span class="wname">' + esc(w) + '</span>'
+        + '<span class="item-tags">' + tags + '</span>'
+        + '<button class="row-btn" onclick="openItemPicker(' + i + ',\'' + attrJsStr(w) + '\')">🏷️ 項目</button>'
+        + '<button class="row-btn del" title="この現場から外す" onclick="unassignWorker(' + i + ',\'' + attrJsStr(w) + '\')">✕</button>'
+        + '</div>';
+    }).join('');
     return '<div class="site-card">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
       + '<div class="site-name">🏗️ ' + esc(site.name) + '</div>'
       + '<button onclick="removeSite(' + i + ')" style="flex-shrink:0;padding:4px 10px;background:#fff;color:#ef4444;border:1.5px solid #fca5a5;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer">✕ 外す</button>'
       + '</div>'
-      + '<div class="worker-list">' + (chips || '<span style="font-size:12px;color:#9ca3af">まだ誰も配置されていません</span>') + '</div>'
+      + (rows ? '<div class="worker-rows">' + rows + '</div>' : '<div class="worker-list"><span style="font-size:12px;color:#9ca3af">まだ誰も配置されていません</span></div>') + ''
       + '<button onclick="openWorkerPicker(' + i + ')" style="width:100%;padding:8px;background:#f0f2f5;color:#374151;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">＋ 作業員を選択</button>'
       + '</div>';
   }).join('');
@@ -340,7 +395,99 @@ function unassignWorker(siteIdx, name){
   if(!site) return;
   const idx = site.workers.indexOf(name);
   if(idx !== -1) site.workers.splice(idx, 1);
+  delete site.workerItems[name];
   renderSites();
+}
+
+// ─────────────────────────────────────────
+// 追加項目(スプレッドシートの「追加項目」シートの選択肢から、作業員ごとに複数選ぶ)
+// ─────────────────────────────────────────
+let itemPickerTarget = null;          // {siteIdx, worker}
+let itemPickerSelected = new Set();   // 追加項目モーダルで選択中の項目
+let workerPickerItems = new Set();    // 作業員選択モーダルで、選んだ作業員全員に付ける項目
+
+// 選択肢の並びはシートの並び順。非表示にした項目でも、すでに選ばれていれば残して外せるようにする
+function itemChoices(selected){
+  const list = [...allItems];
+  selected.forEach(it => { if(!list.includes(it)) list.push(it); });
+  return list;
+}
+
+function sortItems(items){
+  const order = it => { const k = allItems.indexOf(it); return k === -1 ? allItems.length : k; };
+  return [...items].sort((a, b) => order(a) - order(b));
+}
+
+function renderItemChoices(elId, selected, toggleFnName){
+  const el = document.getElementById(elId);
+  const list = itemChoices(selected);
+  if(list.length === 0){
+    el.innerHTML = '<div style="font-size:12px;color:#9ca3af;padding:8px">追加項目がまだ登録されていません。下の欄から登録してください。</div>';
+    return;
+  }
+  el.innerHTML = '<div class="item-choice-list">' + list.map(it => {
+    const on = selected.has(it);
+    return '<span class="item-choice' + (on ? ' selected' : '') + '" onclick="' + toggleFnName + '(\'' + attrJsStr(it) + '\')">'
+      + (on ? '✅ ' : '') + esc(it) + '</span>';
+  }).join('') + '</div>';
+}
+
+function openItemPicker(siteIdx, worker){
+  const site = currentSites[siteIdx];
+  if(!site) return;
+  itemPickerTarget = {siteIdx, worker};
+  itemPickerSelected = new Set(site.workerItems[worker] || []);
+  document.getElementById('item-picker-title').textContent = worker + ' の追加項目';
+  document.getElementById('item-picker-new-item').value = '';
+  renderItemChoices('item-picker-list', itemPickerSelected, 'toggleItemPick');
+  document.getElementById('item-picker-overlay').classList.add('show');
+}
+function closeItemPicker(){
+  document.getElementById('item-picker-overlay').classList.remove('show');
+}
+
+function toggleItemPick(item){
+  if(itemPickerSelected.has(item)) itemPickerSelected.delete(item);
+  else itemPickerSelected.add(item);
+  renderItemChoices('item-picker-list', itemPickerSelected, 'toggleItemPick');
+}
+
+function confirmItemPicker(){
+  const site = itemPickerTarget && currentSites[itemPickerTarget.siteIdx];
+  if(site){
+    if(itemPickerSelected.size > 0) site.workerItems[itemPickerTarget.worker] = sortItems(itemPickerSelected);
+    else delete site.workerItems[itemPickerTarget.worker];
+  }
+  renderSites();
+  closeItemPicker();
+}
+
+function toggleWorkerPickerItem(item){
+  if(workerPickerItems.has(item)) workerPickerItems.delete(item);
+  else workerPickerItems.add(item);
+  renderItemChoices('worker-picker-items', workerPickerItems, 'toggleWorkerPickerItem');
+}
+
+// 新しい項目を「追加項目」シートに登録する。モーダルから登録したときは、その場で選択状態にする
+async function submitNewItem(ctx){
+  const inputId = {item: 'item-picker-new-item', worker: 'worker-picker-new-item', manage: 'manage-new-item'}[ctx];
+  const input = document.getElementById(inputId);
+  const name = input.value.trim();
+  if(!name) return;
+  const res = await postAction({action:'addItem', name});
+  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'登録に失敗しました')); return; }
+  input.value = '';
+  if(!allItems.includes(name)) allItems.push(name);
+  if(ctx === 'item'){
+    itemPickerSelected.add(name);
+    renderItemChoices('item-picker-list', itemPickerSelected, 'toggleItemPick');
+  }else if(ctx === 'worker'){
+    workerPickerItems.add(name);
+    renderItemChoices('worker-picker-items', workerPickerItems, 'toggleWorkerPickerItem');
+  }else{
+    loadRoster();
+  }
+  showToast('✅ 項目「' + name + '」を登録しました');
 }
 
 // ─────────────────────────────────────────
@@ -360,6 +507,11 @@ function openWorkerPicker(siteIdx){
   const dupCheckbox = document.getElementById('worker-picker-show-dup');
   dupCheckbox.checked = false;
   dupCheckbox.closest('label').style.display = (workerPickerTargetSiteIdx === null) ? 'none' : 'flex';
+  // 追加項目は現場に配置するときだけ選べる(名簿登録のみのときは出さない)
+  workerPickerItems = new Set();
+  document.getElementById('worker-picker-new-item').value = '';
+  document.getElementById('worker-picker-items-section').style.display = (workerPickerTargetSiteIdx === null) ? 'none' : 'block';
+  renderItemChoices('worker-picker-items', workerPickerItems, 'toggleWorkerPickerItem');
   if(kintaiEmployees === null){
     loadKintaiEmployees();
   }else{
@@ -470,6 +622,9 @@ async function confirmWorkerPicker(){
     if(workerPickerTargetSiteIdx !== null){
       const site = currentSites[workerPickerTargetSiteIdx];
       if(site && !site.workers.includes(name)) site.workers.push(name);
+      if(site && workerPickerItems.size > 0){
+        site.workerItems[name] = sortItems(new Set([...(site.workerItems[name] || []), ...workerPickerItems]));
+      }
     }
   }
   renderSites();
@@ -560,7 +715,7 @@ function renderSitePicker(){
 function pickSite(name){
   postAction({action:'addSite', name}).then(res => {
     if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
-    currentSites.push({name, workers: []});
+    currentSites.push({name, workers: [], workerItems: {}});
     renderSites();
     closeSitePicker();
     showToast('✅ 「' + name + '」を追加しました');
@@ -627,12 +782,14 @@ function closeManage(){
 function loadRoster(){
   document.getElementById('worker-roster').innerHTML = '<div class="loading">読み込み中…</div>';
   document.getElementById('site-roster').innerHTML = '';
+  document.getElementById('item-roster').innerHTML = '';
   document.getElementById('kintai-exclude-roster').innerHTML = '<div class="loading">読み込み中…</div>';
   fetch(GAS_URL + '?action=getRosterData')
     .then(r => r.json())
     .then(res => {
       if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'読み込み失敗')); return; }
       renderRoster(res.workers || [], res.sites || []);
+      renderItemRoster(res.items || []);
     })
     .catch(() => showToast('⚠️ 読み込みに失敗しました'));
   loadKintaiExcludeList().then(renderKintaiExcludeRoster);
@@ -674,6 +831,27 @@ function renderRoster(workers, sites){
       + (active ? '終了にする' : '稼働中に戻す') + '</button>'
       + '</div>';
   }).join('') || '<div style="font-size:12px;color:#9ca3af;padding:8px">登録された現場がありません</div>';
+}
+
+function renderItemRoster(items){
+  // シートを直接書き換えた場合にも追従するよう、ここで選択肢も最新にする
+  allItems = items.filter(it => it.status === '使用中').map(it => it.name);
+  document.getElementById('item-roster').innerHTML = items.map(it => {
+    const active = it.status === '使用中';
+    return '<div class="roster-item">'
+      + '<span><span class="name">' + esc(it.name) + '</span><span class="status">' + esc(it.status) + '</span></span>'
+      + '<button class="' + (active ? 'active' : 'inactive') + '" onclick="toggleItemStatus(\'' + attrJsStr(it.name) + '\',' + active + ')">'
+      + (active ? '非表示にする' : '使用中に戻す') + '</button>'
+      + '</div>';
+  }).join('') || '<div style="font-size:12px;color:#9ca3af;padding:8px">登録された項目がありません</div>';
+}
+
+// 項目の非表示/戻すは選択肢が変わるだけなので、編集中の配置は読み込み直さない
+async function toggleItemStatus(name, currentlyActive){
+  const status = currentlyActive ? '非表示' : '使用中';
+  const res = await postAction({action:'setItemStatus', name, status});
+  if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'更新に失敗しました')); return; }
+  loadRoster();
 }
 
 async function toggleWorkerStatus(name, currentlyActive){
