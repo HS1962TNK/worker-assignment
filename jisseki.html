@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="作業員配置">
+<meta name="apple-mobile-web-app-title" content="実績・勤務表">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>作業員配置(編集)</title>
+<title>実績・勤務表</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a1a;min-height:100vh}
@@ -51,11 +51,6 @@ input:focus{outline:none;border-color:#1d6fcf}
 .empty-state{text-align:center;padding:40px 20px;color:#9ca3af}
 .loading{text-align:center;padding:32px;color:#9ca3af;font-size:13px}
 
-.share-box{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:14px;margin-top:12px;display:none}
-.share-box.show{display:block}
-.share-box .lbl{font-size:12px;color:#1d6fcf;font-weight:700;margin-bottom:6px}
-.share-box .url{font-size:12px;color:#374151;word-break:break-all;margin-bottom:8px}
-.share-box button{padding:8px 14px;background:#1d6fcf;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
 
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;overflow-y:auto}
 .overlay.show{display:block}
@@ -76,26 +71,43 @@ input:focus{outline:none;border-color:#1d6fcf}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1}
 
-.btn-copy{width:100%;padding:12px;background:#fff;color:#4f46e5;border:1.5px solid #c7d2fe;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:12px}
-.btn-copy:disabled{color:#9ca3af;border-color:#e5e7eb;cursor:not-allowed}
+/* 実績ページ(翌日の配置=haichi.html とは別ページ。色を緑にして見分ける) */
+.btn-save{background:#16a34a}
+.btn-save:disabled{background:#86efac}
+.worker-row{border-color:#bbf7d0;background:#f7fef9}
+.worker-row .wname{color:#15803d}
+
+.status-pill{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700}
+.status-pill.done{background:#dcfce7;color:#15803d}
+.status-pill.pending{background:#fef3c7;color:#92400e}
+.info-line{font-size:12px;color:#374151;margin-top:6px;line-height:1.6}
+.info-line.warn{color:#b45309}
+.num-field{display:flex;align-items:center;gap:3px;font-size:11px;color:#6b7280}
+.num-field input{width:48px;padding:4px 5px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;text-align:right;background:#fff}
+.heat-btn{padding:4px 8px;border:1.5px solid #e5e7eb;border-radius:7px;background:#fff;font-size:11px;font-weight:600;cursor:pointer;color:#6b7280;white-space:nowrap}
+.heat-btn.on{border-color:#f97316;background:#fff7ed;color:#c2410c}
+.heat-btn.manual{border-style:dashed}
+.diff-badge{padding:2px 7px;background:#fee2e2;color:#b91c1c;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap}
+.site-warn{font-size:11px;color:#b45309;margin:-4px 0 8px}
+.kinmu-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.kinmu-row button,.kinmu-row a{flex:1;min-width:140px;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;background:#fff;color:#374151;font-size:12px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none}
+.kinmu-row button.primary{background:#16a34a;border-color:#16a34a;color:#fff}
+.kinmu-row button:disabled{opacity:.5;cursor:not-allowed}
+input[type=month]{width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;color:#1a1a1a;background:#fff;-webkit-appearance:none}
 </style>
 </head>
-<body>
+<body class="jisseki">
 
 <div class="header">
   <div class="header-left" style="display:flex;justify-content:space-between;align-items:flex-start">
     <div>
-      <div class="title">🧑‍🔧 作業員配置(編集)</div>
+      <div class="title">✅ 実績・勤務表</div>
       <div class="sub" id="sync-label">読み込み中…</div>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0">
-      <a href="jisseki.html" title="作業が終わってから、実際に働いた人・ジュース・時間外を入れて勤務表を作る画面" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:1.5px solid #d0d5dd;border-radius:8px;color:#344054;text-decoration:none;font-size:10px;font-weight:600">
-        <span style="font-size:18px;line-height:1">✅</span>
-        実績
-      </a>
-      <a href="summary.html" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:1.5px solid #d0d5dd;border-radius:8px;color:#344054;text-decoration:none;font-size:10px;font-weight:600">
-        <span style="font-size:18px;line-height:1">📊</span>
-        集計
+      <a href="haichi.html" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:1.5px solid #d0d5dd;border-radius:8px;color:#344054;text-decoration:none;font-size:10px;font-weight:600">
+        <span style="font-size:18px;line-height:1">📅</span>
+        配置表
       </a>
       <a href="作業員配置表アプリ_利用マニュアル.pdf" target="_blank" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:1.5px solid #d0d5dd;border-radius:8px;color:#344054;text-decoration:none;font-size:10px;font-weight:600">
         <span style="font-size:18px;line-height:1">📖</span>
@@ -103,17 +115,17 @@ input:focus{outline:none;border-color:#1d6fcf}
       </a>
     </div>
   </div>
+  <div style="font-size:11px;color:#6b7280">その日の作業が終わってから、実際に働いた人と現場・ジュース・時間外を確認して確定します(翌日の配置は「📅 配置表」で)。</div>
 </div>
 
 <div class="content">
   <div class="card">
     <div class="field">
-      <label>配置する日付</label>
+      <label id="date-label">実績の日付(実際に働いた日)</label>
       <input type="date" id="date-input" onchange="loadEditData()">
     </div>
+    <div class="jisseki-only" id="jisseki-info"></div>
   </div>
-
-  <button class="btn-copy" id="copy-prev-btn" onclick="copyPreviousAssignments()" disabled>📋 前回の配置をコピー</button>
 
   <button class="btn-manage" onclick="openManage()">⚙️ 作業員・現場を管理</button>
 
@@ -121,12 +133,26 @@ input:focus{outline:none;border-color:#1d6fcf}
 
   <div id="sites-list"><div class="loading">読み込み中…</div></div>
 
-  <button class="btn-save" id="save-btn" onclick="save()">保存する</button>
+  <button class="btn-save" id="save-btn" onclick="save()">実績を確定する</button>
 
-  <div class="share-box" id="share-box">
-    <div class="lbl">📎 共有リンク(LINEなどに貼ってください)</div>
-    <div class="url" id="share-url"></div>
-    <button onclick="copyShareUrl()">リンクをコピー</button>
+  <!-- 勤務表・集計表 -->
+  <div class="card jisseki-only" id="kinmu-card" style="margin-top:16px">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px">📋 勤務表・集計表</div>
+    <div class="info-line" style="margin-top:0">前月20日〜当月19日の勤務表(横長)と、作業員ごとの集計表(手当額)を「勤務表」スプレッドシートに作ります。実績を確定していない日は予定のまま数えます。毎晩1時台にも自動で作り直します。</div>
+    <div class="field" style="margin-top:10px">
+      <label>勤務表の月(例: 10月 = 9/20〜10/19)</label>
+      <input type="month" id="kinmu-month" onchange="updateKinmuPeriodLabel()">
+      <div class="info-line" id="kinmu-period"></div>
+    </div>
+    <div class="kinmu-row">
+      <button class="primary" id="kinmu-build-btn" onclick="buildKinmuhyo()">🔄 勤務表を作り直す</button>
+      <button id="kinmu-xlsx-btn" onclick="exportKinmuhyoXlsx()">📥 Excelで保存(この月)</button>
+    </div>
+    <div class="kinmu-row">
+      <button id="kinmu-year-btn" onclick="exportYearXlsx()">📥 年間の出勤日数表をExcelで保存</button>
+      <a id="kinmu-open-link" href="#" target="_blank" rel="noopener" style="display:none">📄 スプレッドシートを開く</a>
+    </div>
+    <div class="info-line" id="kinmu-result"></div>
   </div>
 </div>
 
@@ -246,7 +272,6 @@ input:focus{outline:none;border-color:#1d6fcf}
 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxaoCk1BJTOFXgbmU7nvT4GuX-bgdqH3UOUhPduwr_ngsvum50InXWs5KTyNRVUwAoD/exec';
-const SHARE_URL = 'https://hs1962tnk.github.io/worker-assignment/share.html';
 // 現場情報管理システム(別アプリ)の現場一覧を「現場を選択」画面で読み取り専用に参照する
 const GENBA_GAS_URL = 'https://script.google.com/macros/s/AKfycby9b1XxHyum6h_k50ki3kFLDrauDAEXPXAq5GwzSXcr61A9DpvRlf5q3nLCYSYlO9_j/exec';
 // 勤怠管理アプリ(別アプリ)の従業員一覧を「作業員を選択」画面で読み取り専用に参照する
@@ -274,89 +299,26 @@ function showToast(msg, dur=2800){
   setTimeout(() => t.classList.remove('show'), dur);
 }
 
-function tomorrowStr(){
+function todayStr(){
   const d = new Date();
-  d.setDate(d.getDate() + 1);
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
-  return y + '-' + m + '-' + day;
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
+// このページは実績専用(翌日の配置は haichi.html)。現場カードや選択画面の部品は配置表と同じものを使っている
+const mode = 'jisseki';
+let jisseki = {confirmed: false, plan: {}, temp: null, threshold: 34};
+let loadSeq = 0; // 日付を続けて切り替えたとき、古い読み込み結果で上書きしないための番号
+
 window.onload = () => {
-  document.getElementById('date-input').value = tomorrowStr();
+  document.getElementById('date-input').value = todayStr();
+  initKinmuCard();
   loadEditData();
 };
 
 function loadEditData(){
   const date = document.getElementById('date-input').value;
   if(!date) return;
-  document.getElementById('sites-list').innerHTML = '<div class="loading">読み込み中…</div>';
-  document.getElementById('share-box').classList.remove('show');
-
-  fetch(GAS_URL + '?action=getEditData&date=' + encodeURIComponent(date))
-    .then(r => r.json())
-    .then(res => {
-      if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'読み込み失敗')); return; }
-      const excluded = getExcludedSites(date);
-      // 「外す」済みで、かつ作業員が誰も割り当てられていない(=単なる候補の残骸)現場は表示しない。
-      // 実際に配置データが保存済みの現場は、除外設定に関わらず必ず表示する(データを隠さないため)。
-      currentSites = (res.sites || []).filter(s => !(excluded.has(s.name) && s.workers.length === 0));
-      currentSites.forEach(s => { s.workerItems = s.workerItems || {}; });
-      allWorkers   = res.allWorkers || [];
-      allItems     = res.allItems || [];
-      renderSites();
-      document.getElementById('sync-label').textContent = date + ' の配置を編集中';
-      updateCopyPrevButton(date);
-      return autoSuggestSites(date);
-    })
-    .catch(() => showToast('⚠️ 読み込みに失敗しました(オフラインの可能性)'));
-}
-
-// ─────────────────────────────────────────
-// 工期に基づく現場の自動候補追加
-// 現場情報管理システム側の着工日〜完了日が選択中の日付を含む現場を、
-// まだ追加されていなければ自動でカード化しておく(保存前提ではなく、
-// 作業員を1人もチェックしなければ保存対象にはならないので安全)。
-// 一度「外す」で除外した現場は、その日付では再提案しない(ブラウザに記憶)。
-// ─────────────────────────────────────────
-function excludedKey(date){ return 'haichi-excluded-' + date; }
-
-function getExcludedSites(date){
-  try{
-    return new Set(JSON.parse(localStorage.getItem(excludedKey(date)) || '[]'));
-  }catch(e){ return new Set(); }
-}
-
-function addExcludedSite(date, name){
-  try{
-    const set = getExcludedSites(date);
-    set.add(name);
-    localStorage.setItem(excludedKey(date), JSON.stringify([...set]));
-  }catch(e){}
-}
-
-async function autoSuggestSites(date){
-  if(genbaSites === null){
-    await loadGenbaSites();
-  }
-  if(!genbaSites || genbaSites.length === 0) return;
-
-  const already   = new Set(currentSites.map(s => s.name));
-  const excluded  = getExcludedSites(date);
-  const candidates = genbaSites.filter(s =>
-    s.startDate && s.endDate &&
-    s.startDate <= date && date <= s.endDate &&
-    !already.has(s.name) && !excluded.has(s.name)
-  );
-  if(candidates.length === 0) return;
-
-  for(const c of candidates){
-    const res = await postAction({action:'addSite', name: c.name});
-    if(res.status === 'ok') currentSites.push({name: c.name, workers: [], workerItems: {}});
-  }
-  renderSites();
-  showToast('📌 工期内の現場を' + candidates.length + '件、候補に追加しました');
+  loadJissekiData(date, ++loadSeq);
 }
 
 function removeSite(i){
@@ -364,17 +326,83 @@ function removeSite(i){
   if(!site) return;
   if(site.workers.length > 0 && !confirm('「' + site.name + '」はチェック済みの作業員がいます。外してよろしいですか?')) return;
 
-  const date = document.getElementById('date-input').value;
-  addExcludedSite(date, site.name);
   currentSites.splice(i, 1);
   renderSites();
-  showToast('現場「' + site.name + '」を今日の候補から外しました');
+  showToast('現場「' + site.name + '」をこの日の実績から外しました');
+}
+
+// 現場カードの入れ物をそろえる(実績モードではジュース・時間外・酷暑も持つ)
+function normalizeSite(s){
+  s.workerItems = s.workerItems || {};
+  s.juice = s.juice || {};
+  s.overtime = s.overtime || {};
+  s.heat = s.heat || {};
+  return s;
+}
+
+function valStr(v){
+  return (v === undefined || v === null) ? '' : String(v);
+}
+
+function isAutoHeatDay(){
+  return !!(jisseki.temp && jisseki.temp.max >= jisseki.threshold);
+}
+
+// 実績モードで作業員の行に足す欄: ジュース・時間外・酷暑、予定と違うときの印
+function jissekiRowExtras(site, i, w){
+  const planned = (jisseki.plan[w] || []).map(p => p.site);
+  const badge = planned.includes(site.name) ? ''
+    : '<span class="diff-badge">予定から変更' + (planned.length ? '(予定: ' + esc(planned.join('・')) + ')' : '(予定なし)') + '</span>';
+  const night = (site.workerItems[w] || []).includes('夜勤');
+  const h = site.heat[w] || '';
+  const on = h === '〇' || (h === '' && isAutoHeatDay());
+  // 夜勤の組には酷暑を付けない(今までの勤務表の付け方)
+  const heat = night ? ''
+    : '<button class="heat-btn' + (on ? ' on' : '') + (h ? ' manual' : '') + '" onclick="cycleHeat(' + i + ',\'' + attrJsStr(w) + '\')">'
+      + '🌡️ 酷暑' + (on ? '〇' : '—') + (h ? '(手で変更)' : '(自動)') + '</button>';
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;width:100%;padding-top:4px">'
+    + '<label class="num-field">ジュース<input type="number" inputmode="decimal" min="0" step="0.5" value="' + esc(valStr(site.juice[w])) + '" oninput="setJissekiNum(' + i + ',\'juice\',\'' + attrJsStr(w) + '\',this.value)">本</label>'
+    + '<label class="num-field">時間外<input type="number" inputmode="decimal" min="0" step="0.5" value="' + esc(valStr(site.overtime[w])) + '" oninput="setJissekiNum(' + i + ',\'overtime\',\'' + attrJsStr(w) + '\',this.value)">h</label>'
+    + heat + badge
+    + '</div>';
+}
+
+// ジュースは組(日中/夜勤)ごとに誰か1人(職長)に人数を入れる。誰にも付いていない組があれば注意を出す
+function siteJuiceWarning(site){
+  const groups = {day: [], night: []};
+  site.workers.forEach(w => groups[(site.workerItems[w] || []).includes('夜勤') ? 'night' : 'day'].push(w));
+  const missing = Object.keys(groups).filter(k =>
+    groups[k].length > 0 && !groups[k].some(w => valStr(site.juice[w]) !== ''));
+  if(missing.length === 0) return '';
+  return '<div class="site-warn">⚠️ ' + (missing.includes('night') && !missing.includes('day') ? '夜勤の組の' : '')
+    + 'ジュースが誰にも付いていません(職長の人に人数を入れてください)</div>';
+}
+
+function setJissekiNum(i, key, w, value){
+  const site = currentSites[i];
+  if(!site) return;
+  if(value === '' || isNaN(Number(value))) delete site[key][w];
+  else site[key][w] = Number(value);
+}
+
+// 酷暑: 自動(気温で判定) ⇔ 手で反対にする の切り替え
+function cycleHeat(i, w){
+  const site = currentSites[i];
+  if(!site) return;
+  if(site.heat[w]) delete site.heat[w];
+  else site.heat[w] = isAutoHeatDay() ? '×' : '〇';
+  renderSites();
 }
 
 function renderSites(){
   const wrap = document.getElementById('sites-list');
+  currentSites.forEach(normalizeSite);
+  const isJ = mode === 'jisseki';
+  if(isJ) renderJissekiInfo();
   if(currentSites.length === 0){
-    wrap.innerHTML = '<div class="empty-state">現場が登録されていません。<br>「＋ 新しい現場を追加」から登録してください。</div>';
+    wrap.innerHTML = isJ
+      ? '<div class="empty-state">この日の実績はまだありません。<br>「＋ 新しい現場を追加」から登録するか、誰も働いていない日はそのまま「実績を確定する」を押してください。</div>'
+      : '<div class="empty-state">現場が登録されていません。<br>「＋ 新しい現場を追加」から登録してください。</div>';
     return;
   }
   wrap.innerHTML = currentSites.map((site, i) => {
@@ -387,6 +415,7 @@ function renderSites(){
         + '<span class="item-tags">' + tags + '</span>'
         + '<button class="row-btn" onclick="openItemPicker(' + i + ',\'' + attrJsStr(w) + '\')">🏷️ 項目</button>'
         + '<button class="row-btn del" title="この現場から外す" onclick="unassignWorker(' + i + ',\'' + attrJsStr(w) + '\')">✕</button>'
+        + (isJ ? jissekiRowExtras(site, i, w) : '')
         + '</div>';
     }).join('');
     return '<div class="site-card">'
@@ -394,7 +423,7 @@ function renderSites(){
       + '<div class="site-name">🏗️ ' + esc(site.name) + '</div>'
       + '<button onclick="removeSite(' + i + ')" style="flex-shrink:0;padding:4px 10px;background:#fff;color:#ef4444;border:1.5px solid #fca5a5;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer">✕ 外す</button>'
       + '</div>'
-      + (rows ? '<div class="worker-rows">' + rows + '</div>' : '<div class="worker-list"><span style="font-size:12px;color:#9ca3af">まだ誰も配置されていません</span></div>') + ''
+      + (rows ? '<div class="worker-rows">' + rows + '</div>' + (isJ ? siteJuiceWarning(site) : '') : '<div class="worker-list"><span style="font-size:12px;color:#9ca3af">まだ誰も配置されていません</span></div>') + ''
       + '<button onclick="openWorkerPicker(' + i + ')" style="width:100%;padding:8px;background:#f0f2f5;color:#374151;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">＋ 作業員を選択</button>'
       + '</div>';
   }).join('');
@@ -406,6 +435,9 @@ function unassignWorker(siteIdx, name){
   const idx = site.workers.indexOf(name);
   if(idx !== -1) site.workers.splice(idx, 1);
   delete site.workerItems[name];
+  if(site.juice) delete site.juice[name];
+  if(site.overtime) delete site.overtime[name];
+  if(site.heat) delete site.heat[name];
   renderSites();
 }
 
@@ -742,34 +774,7 @@ function submitManualSite(){
 async function save(){
   const date = document.getElementById('date-input').value;
   if(!date){ showToast('❌ 日付を選択してください'); return; }
-  const btn = document.getElementById('save-btn');
-  btn.disabled = true;
-  btn.textContent = '保存中…';
-  try{
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({action:'saveAssignments', date, assignments: currentSites})
-    }).then(r => r.json());
-    if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'保存に失敗しました')); return; }
-    showToast('✅ 保存しました');
-    availableDates = null; // 保存した日が「前回」の候補に加わるので読み直す
-    updateCopyPrevButton(date);
-    document.getElementById('share-url').textContent = SHARE_URL;
-    document.getElementById('share-box').classList.add('show');
-  }catch(e){
-    showToast('⚠️ 送信失敗(オフラインの可能性)');
-  }finally{
-    btn.disabled = false;
-    btn.textContent = '保存する';
-  }
-}
-
-function copyShareUrl(){
-  navigator.clipboard.writeText(SHARE_URL).then(() => {
-    showToast('📋 コピーしました');
-  }).catch(() => {
-    showToast('❌ コピーに失敗しました');
-  });
+  await saveJisseki(date);
 }
 
 async function postAction(payload){
@@ -894,75 +899,169 @@ async function submitAddSite(){
 }
 
 // ─────────────────────────────────────────
-// 前回の配置をコピー(前の日と同じ配置のときに一括で入れ、変わったところだけ直す)
-// 「前回」= 選んだ日付より前で、配置が保存されている一番新しい日(日曜など配置の無い日は飛ばす)
-// コピーしただけでは保存しない。「保存する」を押して確定する
+// 実績(当日に実際に働いた人と現場)
+// 未確定の日は、サーバーが予定から組み立てた下書き(休み・夜勤明けを除き、職長にジュースの人数)が返る
 // ─────────────────────────────────────────
-let availableDates = null; // 配置データがある日付(新しい順)
-
-async function loadAvailableDates(){
-  try{
-    const res = await fetch(GAS_URL + '?action=getAvailableDates').then(r => r.json());
-    availableDates = res.dates || [];
-  }catch(e){
-    availableDates = [];
-  }
-  return availableDates;
+function loadJissekiData(date, seq){
+  document.getElementById('sites-list').innerHTML = '<div class="loading">読み込み中…</div>';
+  document.getElementById('jisseki-info').innerHTML = '';
+  fetch(GAS_URL + '?action=getJissekiData&date=' + encodeURIComponent(date))
+    .then(r => r.json())
+    .then(res => {
+      if(seq !== loadSeq) return;
+      if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'読み込み失敗')); return; }
+      jisseki = {confirmed: !!res.confirmed, plan: res.plan || {}, temp: res.temp || null, threshold: res.threshold || 34};
+      currentSites = (res.sites || []).map(normalizeSite);
+      allWorkers   = res.allWorkers || [];
+      allItems     = res.allItems || [];
+      renderSites();
+      document.getElementById('sync-label').textContent = date + ' の実績' + (res.confirmed ? '(確定済み)' : '(未確定・予定から作った下書き)');
+    })
+    .catch(() => showToast('⚠️ 読み込みに失敗しました(オフラインの可能性)'));
 }
 
-function previousPlanDate(date){
-  return (availableDates || []).find(d => d < date) || '';
+function renderJissekiInfo(){
+  const el = document.getElementById('jisseki-info');
+  const t = jisseki.temp;
+  const tempText = t
+    ? '🌡️ 東京の最高気温 ' + esc(t.max) + '℃(' + esc(t.source) + ') → '
+      + (t.max >= jisseki.threshold ? '<b style="color:#c2410c">酷暑の日(' + jisseki.threshold + '℃以上)</b>' : '酷暑ではない')
+    : '🌡️ 東京の最高気温はまだ取得できていません(毎晩自動で取り込みます)';
+  const inJ = new Set();
+  currentSites.forEach(s => s.workers.forEach(w => inJ.add(w)));
+  const missing = Object.keys(jisseki.plan).filter(w =>
+    !inJ.has(w) && jisseki.plan[w].some(p => p.site !== '休み' && p.site !== '夜勤明け'));
+  el.innerHTML = '<div style="margin-top:4px">'
+    + (jisseki.confirmed
+      ? '<span class="status-pill done">✅ 実績確定済み</span>'
+      : '<span class="status-pill pending">📝 未確定(予定から作った下書き)</span>')
+    + '</div>'
+    + '<div class="info-line">' + tempText + '</div>'
+    + (jisseki.confirmed ? ''
+      : '<div class="info-line">当日の変更(現場の入れ替え・休み・応援など)があれば直して、「実績を確定する」を押してください。休み・夜勤明けは実績に入れません。</div>')
+    + (missing.length ? '<div class="info-line warn">⚠️ 予定にいたが実績に入っていない人: ' + missing.map(esc).join('、') + '</div>' : '');
 }
 
-function mdLabel(d){
-  return Number(d.slice(5,7)) + '/' + Number(d.slice(8,10));
-}
-
-async function updateCopyPrevButton(date){
-  const btn = document.getElementById('copy-prev-btn');
-  if(availableDates === null) await loadAvailableDates();
-  if(document.getElementById('date-input').value !== date) return;
-  const prev = previousPlanDate(date);
-  btn.disabled = !prev;
-  btn.textContent = prev ? '📋 前回(' + mdLabel(prev) + ')の配置をコピー' : '📋 コピーできる前回の配置がありません';
-}
-
-async function copyPreviousAssignments(){
-  const date = document.getElementById('date-input').value;
-  const prev = previousPlanDate(date);
-  if(!date || !prev) return;
-  if(currentSites.some(s => s.workers.length > 0) &&
-     !confirm(date + ' に入力中の配置を、' + mdLabel(prev) + ' の配置で置き換えます。よろしいですか?(「保存する」を押すまでは確定しません)')) return;
-  const btn = document.getElementById('copy-prev-btn');
+async function saveJisseki(date){
+  const sites = currentSites.filter(s => s.workers.length > 0).map(s => ({
+    name: s.name, workers: s.workers, workerItems: s.workerItems, juice: s.juice, overtime: s.overtime, heat: s.heat
+  }));
+  if(date > todayStr() && !confirm(date + ' はまだ先の日付です。実績として確定してよろしいですか?')) return;
+  if(sites.length === 0 && !confirm(date + ' を「誰も働いていない日」として確定します。よろしいですか?')) return;
+  const btn = document.getElementById('save-btn');
   btn.disabled = true;
+  btn.textContent = '確定中…';
   try{
-    const res = await fetch(GAS_URL + '?action=getShareData&date=' + encodeURIComponent(prev)).then(r => r.json());
-    if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'前回の配置を読み込めませんでした')); return; }
-    const active = new Set(allWorkers);
-    const skipped = [];
-    const copied = [];
-    (res.sites || []).forEach(s => {
-      if(s.name === '夜勤明け') return; // 前の日の夜勤の結果なので引き継がない
-      const workers = (s.workers || []).filter(w => {
-        if(active.size && !active.has(w)){ skipped.push(w); return false; } // 退職にした人は外す
-        return true;
-      });
-      const items = {};
-      workers.forEach(w => { if(s.workerItems && s.workerItems[w]) items[w] = [...s.workerItems[w]]; });
-      if(workers.length) copied.push({name: s.name, workers, workerItems: items});
-    });
-    // 工期による候補などで出ている「まだ誰もいない現場」はそのまま残す
-    const names = new Set(copied.map(s => s.name));
-    currentSites.filter(s => s.workers.length === 0 && !names.has(s.name)).forEach(s => copied.push(s));
-    currentSites = copied;
-    renderSites();
-    showToast('📋 ' + mdLabel(prev) + ' の配置をコピーしました(まだ保存していません)', 3500);
-    if(skipped.length) setTimeout(() => showToast('一覧に無い人は外しました: ' + skipped.join('、'), 3500), 3600);
-  }catch(e){
-    showToast('⚠️ 前回の配置を読み込めませんでした(オフラインの可能性)');
+    const res = await postAction({action:'saveJisseki', date, sites});
+    if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'確定に失敗しました')); return; }
+    showToast('✅ ' + date + ' の実績を確定しました(' + res.count + '人)');
+    loadEditData();
   }finally{
-    btn.disabled = !previousPlanDate(document.getElementById('date-input').value);
+    btn.disabled = false;
+    btn.textContent = '実績を確定する';
   }
+}
+
+// ─────────────────────────────────────────
+// 勤務表・集計表(前月20日〜当月19日)
+// ─────────────────────────────────────────
+let kinmuInfoLoaded = false;
+
+// その日が入る勤務表の月。20日以降は翌月分
+function kinmuYmOfDate(dateStr){
+  let [y, m, d] = dateStr.split('-').map(Number);
+  if(d >= 20){ m++; if(m > 12){ m = 1; y++; } }
+  return y + '-' + String(m).padStart(2,'0');
+}
+
+function kinmuPeriodText(ym){
+  const [y, m] = ym.split('-').map(Number);
+  const py = m === 1 ? y - 1 : y;
+  const pm = m === 1 ? 12 : m - 1;
+  return py + '/' + pm + '/20 〜 ' + y + '/' + m + '/19';
+}
+
+function initKinmuCard(){
+  const input = document.getElementById('kinmu-month');
+  if(!input.value) input.value = kinmuYmOfDate(todayStr());
+  updateKinmuPeriodLabel();
+  if(kinmuInfoLoaded) return;
+  kinmuInfoLoaded = true;
+  fetch(GAS_URL + '?action=getKinmuhyoInfo')
+    .then(r => r.json())
+    .then(res => { if(res.status === 'ok' && res.url) showKinmuLink(res.url); })
+    .catch(() => {});
+}
+
+function updateKinmuPeriodLabel(){
+  const ym = document.getElementById('kinmu-month').value;
+  document.getElementById('kinmu-period').textContent = ym ? '期間: ' + kinmuPeriodText(ym) : '';
+}
+
+function showKinmuLink(url){
+  const a = document.getElementById('kinmu-open-link');
+  a.href = url;
+  a.style.display = '';
+}
+
+function setKinmuBusy(busy, html){
+  ['kinmu-build-btn', 'kinmu-xlsx-btn', 'kinmu-year-btn'].forEach(id => { document.getElementById(id).disabled = busy; });
+  if(html !== undefined) document.getElementById('kinmu-result').innerHTML = html;
+}
+
+function unconfirmedText(list){
+  if(!list || list.length === 0) return 'すべての日の実績が確定済みです。';
+  return '⚠️ 実績が未確定で、予定のまま数えた日: ' + list.map(d => Number(d.slice(5,7)) + '/' + Number(d.slice(8,10))).join('、');
+}
+
+function selectedKinmuYm(){
+  const ym = document.getElementById('kinmu-month').value;
+  if(!ym) showToast('❌ 勤務表の月を選んでください');
+  return ym;
+}
+
+async function buildKinmuhyo(){
+  const ym = selectedKinmuYm();
+  if(!ym) return;
+  setKinmuBusy(true, '作成中…(30秒ほどかかることがあります)');
+  const res = await postAction({action:'buildKinmuhyo', ym});
+  if(res.status !== 'ok'){ setKinmuBusy(false, '❌ ' + esc(res.message||'作成に失敗しました')); return; }
+  showKinmuLink(res.url);
+  setKinmuBusy(false, '✅ 「' + (res.sheets || []).map(esc).join('」「') + '」を作り直しました。<br>' + esc(unconfirmedText(res.unconfirmed)));
+}
+
+async function exportKinmuhyoXlsx(){
+  const ym = selectedKinmuYm();
+  if(!ym) return;
+  setKinmuBusy(true, '勤務表を作り直してExcelに変換中…(1分ほどかかることがあります)');
+  const res = await postAction({action:'exportKinmuhyoXlsx', ym});
+  if(res.status !== 'ok'){ setKinmuBusy(false, '❌ ' + esc(res.message||'Excelの作成に失敗しました')); return; }
+  downloadBase64(res.base64, res.fileName);
+  setKinmuBusy(false, '✅ ' + esc(res.fileName) + ' をダウンロードしました(Driveの「勤務表」フォルダにも保存)。<br>' + esc(unconfirmedText(res.unconfirmed)));
+}
+
+async function exportYearXlsx(){
+  const ym = selectedKinmuYm();
+  if(!ym) return;
+  const year = ym.slice(0, 4);
+  setKinmuBusy(true, year + '年の出勤日数表をExcelに変換中…');
+  const res = await postAction({action:'exportYearXlsx', year});
+  if(res.status !== 'ok'){ setKinmuBusy(false, '❌ ' + esc(res.message||'Excelの作成に失敗しました')); return; }
+  downloadBase64(res.base64, res.fileName);
+  setKinmuBusy(false, '✅ ' + esc(res.fileName) + ' をダウンロードしました(Driveの「勤務表」フォルダにも保存)。');
+}
+
+function downloadBase64(b64, fileName){
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const blob = new Blob([bytes], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 </script>
 </body>
