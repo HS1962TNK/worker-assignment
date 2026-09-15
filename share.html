@@ -40,6 +40,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .attach-photo-grid img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}
 .attach-doc-list{display:flex;flex-direction:column;gap:6px}
 .attach-doc-item{display:flex;align-items:center;gap:6px;padding:7px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;color:#374151;text-decoration:none}
+
+/* 現場チャット(現場情報管理システムのチャットを見るだけ) */
+.chat-list{max-height:340px;overflow-y:auto;background:#f0f2f5;border-radius:10px;padding:10px}
+.chat-msg{margin-bottom:10px}
+.chat-msg:last-child{margin-bottom:0}
+.chat-msg-author{font-size:11px;color:#6b7280;font-weight:600;margin-bottom:2px}
+.chat-msg-bubble{display:inline-block;max-width:100%;background:#fff;padding:7px 11px;border-radius:12px;font-size:13px;line-height:1.5;color:#1a1a1a;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.chat-msg-time{font-size:10px;color:#9ca3af;margin-top:2px}
+.chat-note{font-size:11px;color:#9ca3af;margin-top:6px}
 </style>
 </head>
 <body>
@@ -139,12 +148,67 @@ function renderAttachPanel(site, attachments){
     '<div class="attach-panel" id="' + id + '">' + photoGrid + docList + '</div>';
 }
 
+// ─────────────────────────────────────────
+// 現場チャット(現場情報管理システムの「💬 チャット」を見るだけ。書き込みはできない)
+// 配置を表示したあと、現場ごとにメッセージを取りに行き、1件以上ある現場だけにボタンを出す
+// ─────────────────────────────────────────
+let renderSeq = 0; // 日付を切り替えたとき、前の日付のチャット結果を描かないための番号
+
+function chatSlot(site, attachments){
+  // 現場情報管理システムに登録されていない現場(休みなど)にはチャットも無い
+  if(!attachments[site.name]) return '';
+  return '<div class="chat-slot" data-site="' + esc(site.name) + '"></div>';
+}
+
+function formatChatTime(iso){
+  try{
+    return new Date(iso).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
+  }catch(e){ return ''; }
+}
+
+function loadChats(seq){
+  document.querySelectorAll('.chat-slot').forEach(slot => {
+    const name = slot.dataset.site;
+    fetch(GENBA_GAS_URL + '?action=getChatMessages&site=' + encodeURIComponent(name))
+      .then(r => r.json())
+      .then(res => {
+        if(seq !== renderSeq) return;
+        const msgs = res.messages || [];
+        if(msgs.length === 0) return;
+        const id = 'chat-' + (attachSeq++);
+        const last = msgs[msgs.length - 1];
+        slot.innerHTML = '<button class="attach-toggle" onclick="toggleChat(\'' + id + '\')">💬 チャットを見る(' + msgs.length + '件・最新 ' + esc(formatChatTime(last.time)) + ')</button>'
+          + '<div class="attach-panel" id="' + id + '">'
+          + '<div class="chat-list">' + msgs.map(m =>
+              '<div class="chat-msg">'
+              + '<div class="chat-msg-author">' + esc(m.author) + '</div>'
+              + '<div class="chat-msg-bubble">' + esc(m.message) + '</div>'
+              + '<div class="chat-msg-time">' + esc(formatChatTime(m.time)) + '</div>'
+              + '</div>'
+            ).join('') + '</div>'
+          + '<div class="chat-note">見るだけです。書き込みは現場情報管理システムの「💬 チャット」から行ってください。</div>'
+          + '</div>';
+      })
+      .catch(() => {});
+  });
+}
+
+function toggleChat(id){
+  const panel = document.getElementById(id);
+  panel.classList.toggle('show');
+  // 開いたときは一番新しいメッセージが見えるように下までスクロール
+  const list = panel.querySelector('.chat-list');
+  if(panel.classList.contains('show') && list) list.scrollTop = list.scrollHeight;
+}
+
 function loadDate(dateParam){
   const url = GAS_URL + '?action=getShareData' + (dateParam ? '&date=' + encodeURIComponent(dateParam) : '');
   document.getElementById('content').innerHTML = '<div class="loading">読み込み中…</div>';
+  const seq = ++renderSeq;
 
   Promise.all([fetch(url).then(r => r.json()), fetchSiteTotals(), fetchGenbaAttachments()])
     .then(([res, siteTotals, attachments]) => {
+      if(seq !== renderSeq) return;
       if(res.status !== 'ok'){
         document.getElementById('date-label').textContent = 'エラー';
         document.getElementById('content').innerHTML = '<div class="empty-state">読み込みに失敗しました</div>';
@@ -185,8 +249,10 @@ function loadDate(dateParam){
           + '<div class="site-name"><span>🏗️ ' + esc(site.name) + '</span><span class="site-count">(累計' + total + '人工)</span></div>'
           + body
           + renderAttachPanel(site, attachments)
+          + chatSlot(site, attachments)
           + '</div>';
       }).join('');
+      loadChats(seq);
     })
     .catch(() => {
       document.getElementById('date-label').textContent = 'エラー';
