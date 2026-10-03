@@ -336,6 +336,16 @@ function addExcludedSite(date, name){
   }catch(e){}
 }
 
+// 「＋ 新しい現場を追加」で選び直したときは「外した」記憶も消す
+// (消さないと、作業員を入れないまま再読み込みした時点でまたカードが消えてしまう)
+function removeExcludedSite(date, name){
+  try{
+    const set = getExcludedSites(date);
+    if(!set.delete(name)) return;
+    localStorage.setItem(excludedKey(date), JSON.stringify([...set]));
+  }catch(e){}
+}
+
 async function autoSuggestSites(date){
   if(genbaSites === null){
     await loadGenbaSites();
@@ -368,7 +378,7 @@ function removeSite(i){
   addExcludedSite(date, site.name);
   currentSites.splice(i, 1);
   renderSites();
-  showToast('現場「' + site.name + '」を今日の候補から外しました');
+  showToast('現場「' + site.name + '」をこの日の画面から外しました(戻すときは「＋ 新しい現場を追加」から)', 4000);
 }
 
 function renderSites(){
@@ -705,6 +715,7 @@ function renderSitePicker(){
   if(!listEl) return;
   const filterText = (document.getElementById('site-picker-filter').value || '').trim();
   const already = new Set(currentSites.map(s => s.name));
+  const excludedToday = getExcludedSites(document.getElementById('date-input').value);
   let list = genbaSites.filter(s => !already.has(s.name));
   if(filterText) list = list.filter(s => s.name.includes(filterText));
 
@@ -716,7 +727,9 @@ function renderSitePicker(){
   }
   listEl.innerHTML = list.map(s =>
     '<div class="roster-item" style="cursor:pointer" onclick="pickSite(\'' + attrJsStr(s.name) + '\')">' +
-      '<span class="name">' + esc(s.name) + '</span>' +
+      '<span><span class="name">' + esc(s.name) + '</span>' +
+        (excludedToday.has(s.name) ? '<span class="status">この日の画面から外した現場</span>' : '') +
+      '</span>' +
       '<button>追加</button>' +
     '</div>'
   ).join('');
@@ -725,6 +738,7 @@ function renderSitePicker(){
 function pickSite(name){
   postAction({action:'addSite', name}).then(res => {
     if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
+    removeExcludedSite(document.getElementById('date-input').value, name);
     currentSites.push({name, workers: [], workerItems: {}});
     renderSites();
     closeSitePicker();
