@@ -369,7 +369,10 @@ function todayStr(){
 
 // このページは実績専用(翌日の配置は haichi.html)。現場カードや選択画面の部品は配置表と同じものを使っている
 const mode = 'jisseki';
-let jisseki = {confirmed: false, plan: {}, temp: null, threshold: 34};
+let jisseki = {confirmed: false, plan: {}, planSites: [], temp: null, threshold: 34};
+// 読み込んでから手で直したか。直していなければ、タブに戻ってきたときに読み込み直す
+// (別のタブで予定を保存したのに、古い下書きのまま確定してしまうのを防ぐ)
+let dirty = false;
 let loadSeq = 0; // 日付を続けて切り替えたとき、古い読み込み結果で上書きしないための番号
 
 window.onload = () => {
@@ -377,6 +380,10 @@ window.onload = () => {
   initKinmuCard();
   loadEditData();
 };
+
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && !dirty) loadEditData();
+});
 
 function loadEditData(){
   const date = document.getElementById('date-input').value;
@@ -443,6 +450,7 @@ function siteJuiceWarning(site){
 function setJissekiNum(i, key, w, value){
   const site = currentSites[i];
   if(!site) return;
+  dirty = true;
   if(value === '' || isNaN(Number(value))) delete site[key][w];
   else site[key][w] = Number(value);
 }
@@ -457,6 +465,7 @@ function cycleHeat(i, w){
 }
 
 function renderSites(){
+  dirty = true; // 読み込み直後は loadJissekiData が false に戻す
   const wrap = document.getElementById('sites-list');
   currentSites.forEach(normalizeSite);
   const isJ = mode === 'jisseki';
@@ -988,11 +997,12 @@ function loadJissekiData(date, seq){
     .then(res => {
       if(seq !== loadSeq) return;
       if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'読み込み失敗')); return; }
-      jisseki = {confirmed: !!res.confirmed, plan: res.plan || {}, temp: res.temp || null, threshold: res.threshold || 34};
+      jisseki = {confirmed: !!res.confirmed, plan: res.plan || {}, planSites: res.planSites || [], temp: res.temp || null, threshold: res.threshold || 34};
       currentSites = (res.sites || []).map(s => normalizeSite(fromServerSite(s)));
       allWorkers   = res.allWorkers || [];
       allItems     = res.allItems || [];
       renderSites();
+      dirty = false;
       document.getElementById('sync-label').textContent = date + ' の実績' + (res.confirmed ? '(確定済み)' : '(未確定・予定から作った下書き)');
     })
     .catch(() => showToast('⚠️ 読み込みに失敗しました(オフラインの可能性)'));
@@ -1015,9 +1025,26 @@ function renderJissekiInfo(){
       : '<span class="status-pill pending">📝 未確定(予定から作った下書き)</span>')
     + '</div>'
     + '<div class="info-line">' + tempText + '</div>'
-    + (jisseki.confirmed ? ''
+    + (jisseki.confirmed
+      ? '<div class="info-line">確定したあとに予定(配置表)を直しても、実績には自動では入りません。予定に合わせるときは下の「予定から作り直す」を押してください。</div>'
       : '<div class="info-line">当日の変更(現場の入れ替え・休み・応援など)があれば直して、「実績を確定する」を押してください。休み・夜勤明けは実績に入れません。</div>')
-    + (missing.length ? '<div class="info-line warn">⚠️ 予定にいたが実績に入っていない人: ' + missing.map(esc).join('、') + '</div>' : '');
+    + (missing.length ? '<div class="info-line warn">⚠️ 予定にいたが実績に入っていない人: ' + missing.map(esc).join('、') + '</div>' : '')
+    + (jisseki.confirmed && planWorkerCount() > 0
+      ? '<button onclick="rebuildFromPlan()" style="margin-top:6px;padding:6px 12px;background:#fff;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">📋 予定から作り直す</button>'
+      : '');
+}
+
+function planWorkerCount(){
+  return jisseki.planSites.reduce((n, s) => n + (s.workers || []).length, 0);
+}
+
+// 確定済みの日を、予定から作った下書き(未確定の日と同じもの)に置き換える。「実績を確定する」を押すまでは保存しない
+function rebuildFromPlan(){
+  if(currentSites.some(s => s.workers.length > 0)
+     && !confirm('いま表示している実績を、予定から作った下書きに置き換えます。よろしいですか?(「実績を確定する」を押すまでは保存されません)')) return;
+  currentSites = JSON.parse(JSON.stringify(jisseki.planSites)).map(s => normalizeSite(fromServerSite(s)));
+  renderSites();
+  showToast('📋 予定から作り直しました。確認して「実績を確定する」を押してください', 3500);
 }
 
 async function saveJisseki(date){
@@ -1025,7 +1052,14 @@ async function saveJisseki(date){
     name: s.name, workers: s.workers, workerItems: itemsForSave(s), juice: s.juice, overtime: s.overtime, heat: s.heat
   }));
   if(date > todayStr() && !confirm(date + ' はまだ先の日付です。実績として確定してよろしいですか?')) return;
-  if(sites.length === 0 && !confirm(date + ' を「誰も働いていない日」として確定します。よろしいですか?')) return;
+  if(sites.length === 0){
+    // 予定に人がいるのに空で確定しようとしているときは、はっきり知らせる(古い画面のまま押した場合など)
+    const n = Object.keys(jisseki.plan).filter(w => jisseki.plan[w].some(p => p.site !== '休み' && p.site !== '夜勤明け')).length;
+    const msg = n > 0
+      ? date + ' の予定には' + n + '人が入っていますが、実績は「誰も働いていない日」として確定されます。よろしいですか?\n(予定を入れたばかりなら、キャンセルして画面を読み込み直してください)'
+      : date + ' を「誰も働いていない日」として確定します。よろしいですか?';
+    if(!confirm(msg)) return;
+  }
   const btn = document.getElementById('save-btn');
   btn.disabled = true;
   btn.textContent = '確定中…';
