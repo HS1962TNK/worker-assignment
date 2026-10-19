@@ -18,6 +18,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 .site-card{background:#fff;border-radius:12px;padding:16px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
 .site-name{font-size:16px;font-weight:700;color:#1a1a1a;margin-bottom:10px;display:flex;align-items:baseline;gap:6px}
+.site-card.night{background:#eef2ff;border:1.5px solid #a5b4fc}
+.site-card.night .site-name{color:#3730a3}
 .site-count{font-size:13px;font-weight:700;color:#1d6fcf}
 .worker-tags{display:flex;flex-wrap:wrap;gap:8px}
 .worker-tag{padding:7px 12px;background:#eff6ff;color:#1d6fcf;border-radius:20px;font-size:14px;font-weight:600}
@@ -232,9 +234,15 @@ function loadDate(dateParam){
           '<div class="empty-state"><div class="empty-icon">📋</div>この日の配置はまだありません</div>';
         return;
       }
+      // 同じ現場名の日中のカードがあれば、写真・書類とチャットはそちらにだけ出す(二重に出さない)
+      const dayNames = new Set(sites.filter(s => !s.night).map(s => s.name));
       document.getElementById('content').innerHTML = sites.map(site => {
         const workers = site.workers || [];
-        const workerItems = site.workerItems || {};
+        // 夜勤のカードはカード自体に🌙を出すので、作業員の項目の「夜勤」は表示しない
+        const workerItems = {};
+        Object.keys(site.workerItems || {}).forEach(w => {
+          workerItems[w] = site.workerItems[w].filter(it => !(site.night && it === '夜勤'));
+        });
         // 追加項目が付いた作業員がいる現場は1人1行で項目を横に並べ、いなければ従来どおり名前を横に並べる
         const hasItems = workers.some(w => (workerItems[w] || []).length > 0);
         const body = hasItems
@@ -245,11 +253,14 @@ function loadDate(dateParam){
             ).join('') + '</div>'
           : '<div class="worker-tags">' + workers.map(w => '<span class="worker-tag">' + esc(w) + '</span>').join('') + '</div>';
         const total = siteTotals[site.name] || 0;
-        return '<div class="site-card">'
-          + '<div class="site-name"><span>🏗️ ' + esc(site.name) + '</span><span class="site-count">(累計' + total + '人工)</span></div>'
+        const nightOnly = site.night && dayNames.has(site.name);
+        const title = site.night
+          ? '🌙 ' + esc(site.name) + (/夜勤(?!明け)/.test(site.name) ? '' : '(夜勤)')
+          : '🏗️ ' + esc(site.name);
+        return '<div class="site-card' + (site.night ? ' night' : '') + '">'
+          + '<div class="site-name"><span>' + title + '</span><span class="site-count">(累計' + total + '人工)</span></div>'
           + body
-          + renderAttachPanel(site, attachments)
-          + chatSlot(site, attachments)
+          + (nightOnly ? '' : renderAttachPanel(site, attachments) + chatSlot(site, attachments))
           + '</div>';
       }).join('');
       loadChats(seq);

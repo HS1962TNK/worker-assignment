@@ -29,6 +29,11 @@ input:focus{outline:none;border-color:#1d6fcf}
 
 .site-card{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
 .site-name{font-size:15px;font-weight:700;color:#1a1a1a;margin-bottom:10px}
+.site-card.night{background:#eef2ff;border:1.5px solid #a5b4fc}
+.site-card.night .site-name{color:#3730a3}
+.night-btn{flex-shrink:0;padding:4px 10px;background:#fff;color:#4338ca;border:1.5px solid #c7d2fe;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer}
+.site-card.night .night-btn{color:#b45309;border-color:#fcd34d}
+.night-hint{font-size:12px;color:#4338ca;background:#eef2ff;border-radius:8px;padding:6px 10px;margin-bottom:10px}
 .worker-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 .worker-chip{display:flex;align-items:center;gap:5px;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:20px;font-size:13px;cursor:pointer;user-select:none;background:#fff}
 .worker-chip.checked{border-color:#1d6fcf;background:#eff6ff;color:#1d6fcf;font-weight:600}
@@ -168,6 +173,10 @@ input[type=month]{width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border
         <label>絞り込み</label>
         <input type="text" id="site-picker-filter" placeholder="現場名で検索" oninput="renderSitePicker()">
       </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#4338ca;font-weight:600;margin-bottom:10px;cursor:pointer">
+        <input type="checkbox" id="site-picker-night" onchange="renderSitePicker()" style="width:auto">
+        🌙 夜勤の現場として追加する(日中と同じ現場でも別のカードになります)
+      </label>
       <div id="site-picker-list"><div class="loading">読み込み中…</div></div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
         <div class="inline-add">
@@ -193,8 +202,9 @@ input[type=month]{width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border
       </div>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;margin-bottom:10px;cursor:pointer">
         <input type="checkbox" id="worker-picker-show-dup" onchange="renderWorkerPicker()" style="width:auto">
-        他の現場に配置済みの作業員も表示する(掛け持ちの場合)
+        同じ時間帯(日中/夜勤)の他の現場に配置済みの作業員も表示する(掛け持ちの場合)
       </label>
+      <div class="night-hint" id="worker-picker-night-hint" style="display:none">🌙 夜勤の現場です。日中の現場に配置済みの人も一覧に出ています。</div>
       <div id="worker-picker-list"><div class="loading">読み込み中…</div></div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb">
         <div class="inline-add">
@@ -292,6 +302,59 @@ function attrJsStr(s){
   return esc(String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
 }
 
+// ─────────────────────────────────────────
+// 夜勤の現場カード
+// 夜勤はカード単位で持つ(🌙夜勤のカード)。同じ現場でも日中と夜勤は別のカードにする。
+// データ上は今までどおり、作業員ごとの追加項目「夜勤」として保存する(勤務表では翌日の行に載る)。
+// 現場名に「夜勤」が入っている現場(例: 羽田空港(夜勤))は自動で夜勤のカードにする(「夜勤明け」は除く)
+// ─────────────────────────────────────────
+const NIGHT_ITEM = '夜勤';
+function isNightSiteName(name){ return /夜勤(?!明け)/.test(String(name || '')); }
+function isSameCard(s, name, night){ return s.name === name && !!s.night === !!night; }
+
+// サーバーから来た現場を画面用にする。夜勤のカードでは、作業員の項目から「夜勤」を外して持つ
+function fromServerSite(s){
+  s.workers = s.workers || [];
+  s.workerItems = s.workerItems || {};
+  s.night = !!s.night || isNightSiteName(s.name);
+  if(s.night){
+    Object.keys(s.workerItems).forEach(w => {
+      const items = s.workerItems[w].filter(it => it !== NIGHT_ITEM);
+      if(items.length) s.workerItems[w] = items; else delete s.workerItems[w];
+    });
+  }
+  return s;
+}
+
+// 保存用の項目。夜勤のカードの人には「夜勤」を付ける
+function itemsForSave(s){
+  const out = {};
+  s.workers.forEach(w => {
+    const items = (s.workerItems[w] || []).filter(it => it !== NIGHT_ITEM);
+    if(s.night) items.push(NIGHT_ITEM);
+    if(items.length) out[w] = items;
+  });
+  return out;
+}
+
+function siteTitle(s){
+  return s.night
+    ? '🌙 ' + esc(s.name) + (isNightSiteName(s.name) ? '' : '<span style="font-size:12px;margin-left:4px">(夜勤)</span>')
+    : '🏗️ ' + esc(s.name);
+}
+
+function toggleNight(i){
+  const s = currentSites[i];
+  if(!s) return;
+  if(s.night && isNightSiteName(s.name)){ showToast('現場名に「夜勤」が入っているので、夜勤のカードのままです'); return; }
+  if(currentSites.some((o, k) => k !== i && isSameCard(o, s.name, !s.night))){
+    showToast('「' + s.name + '」の' + (s.night ? '日中' : '夜勤') + 'のカードはすでにあります');
+    return;
+  }
+  s.night = !s.night;
+  renderSites();
+}
+
 function showToast(msg, dur=2800){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -350,10 +413,13 @@ function isAutoHeatDay(){
 
 // 実績モードで作業員の行に足す欄: ジュース・時間外・酷暑、予定と違うときの印
 function jissekiRowExtras(site, i, w){
-  const planned = (jisseki.plan[w] || []).map(p => p.site);
-  const badge = planned.includes(site.name) ? ''
-    : '<span class="diff-badge">予定から変更' + (planned.length ? '(予定: ' + esc(planned.join('・')) + ')' : '(予定なし)') + '</span>';
-  const night = (site.workerItems[w] || []).includes('夜勤');
+  // 予定と同じ現場・同じ時間帯(日中/夜勤)なら印を出さない
+  const plans = jisseki.plan[w] || [];
+  const planNight = p => (p.items || []).includes(NIGHT_ITEM) || isNightSiteName(p.site);
+  const planText = p => p.site + (planNight(p) && !isNightSiteName(p.site) ? '(夜勤)' : '');
+  const badge = plans.some(p => p.site === site.name && planNight(p) === !!site.night) ? ''
+    : '<span class="diff-badge">予定から変更' + (plans.length ? '(予定: ' + esc(plans.map(planText).join('・')) + ')' : '(予定なし)') + '</span>';
+  const night = !!site.night;
   const h = site.heat[w] || '';
   const on = h === '〇' || (h === '' && isAutoHeatDay());
   // 夜勤の組には酷暑を付けない(今までの勤務表の付け方)
@@ -367,14 +433,10 @@ function jissekiRowExtras(site, i, w){
     + '</div>';
 }
 
-// ジュースは組(日中/夜勤)ごとに誰か1人(職長)に人数を入れる。誰にも付いていない組があれば注意を出す
+// ジュースは組(現場カード。日中と夜勤は別のカード)ごとに誰か1人(職長)に人数を入れる。誰にも付いていなければ注意を出す
 function siteJuiceWarning(site){
-  const groups = {day: [], night: []};
-  site.workers.forEach(w => groups[(site.workerItems[w] || []).includes('夜勤') ? 'night' : 'day'].push(w));
-  const missing = Object.keys(groups).filter(k =>
-    groups[k].length > 0 && !groups[k].some(w => valStr(site.juice[w]) !== ''));
-  if(missing.length === 0) return '';
-  return '<div class="site-warn">⚠️ ' + (missing.includes('night') && !missing.includes('day') ? '夜勤の組の' : '')
+  if(site.workers.length === 0 || site.workers.some(w => valStr(site.juice[w]) !== '')) return '';
+  return '<div class="site-warn">⚠️ ' + (site.night ? '夜勤の組の' : '')
     + 'ジュースが誰にも付いていません(職長の人に人数を入れてください)</div>';
 }
 
@@ -418,10 +480,13 @@ function renderSites(){
         + (isJ ? jissekiRowExtras(site, i, w) : '')
         + '</div>';
     }).join('');
-    return '<div class="site-card">'
+    return '<div class="site-card' + (site.night ? ' night' : '') + '">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
-      + '<div class="site-name">🏗️ ' + esc(site.name) + '</div>'
+      + '<div class="site-name">' + siteTitle(site) + '</div>'
+      + '<div style="display:flex;gap:6px;flex-shrink:0">'
+      + '<button class="night-btn" onclick="toggleNight(' + i + ')">' + (site.night ? '☀️ 日中にする' : '🌙 夜勤にする') + '</button>'
       + '<button onclick="removeSite(' + i + ')" style="flex-shrink:0;padding:4px 10px;background:#fff;color:#ef4444;border:1.5px solid #fca5a5;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer">✕ 外す</button>'
+      + '</div>'
       + '</div>'
       + (rows ? '<div class="worker-rows">' + rows + '</div>' + (isJ ? siteJuiceWarning(site) : '') : '<div class="worker-list"><span style="font-size:12px;color:#9ca3af">まだ誰も配置されていません</span></div>') + ''
       + '<button onclick="openWorkerPicker(' + i + ')" style="width:100%;padding:8px;background:#f0f2f5;color:#374151;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">＋ 作業員を選択</button>'
@@ -450,8 +515,9 @@ let workerPickerItems = new Set();    // 作業員選択モーダルで、選ん
 
 // 選択肢の並びはシートの並び順。非表示にした項目でも、すでに選ばれていれば残して外せるようにする
 function itemChoices(selected){
-  const list = [...allItems];
-  selected.forEach(it => { if(!list.includes(it)) list.push(it); });
+  // 「夜勤」は項目ではなく現場カードの🌙で付けるので、選択肢には出さない
+  const list = allItems.filter(it => it !== NIGHT_ITEM);
+  selected.forEach(it => { if(it !== NIGHT_ITEM && !list.includes(it)) list.push(it); });
   return list;
 }
 
@@ -549,6 +615,8 @@ function openWorkerPicker(siteIdx){
   const dupCheckbox = document.getElementById('worker-picker-show-dup');
   dupCheckbox.checked = false;
   dupCheckbox.closest('label').style.display = (workerPickerTargetSiteIdx === null) ? 'none' : 'flex';
+  const targetSite = workerPickerTargetSiteIdx === null ? null : currentSites[workerPickerTargetSiteIdx];
+  document.getElementById('worker-picker-night-hint').style.display = (targetSite && targetSite.night) ? 'block' : 'none';
   // 追加項目は現場に配置するときだけ選べる(名簿登録のみのときは出さない)
   workerPickerItems = new Set();
   document.getElementById('worker-picker-new-item').value = '';
@@ -606,8 +674,11 @@ function renderWorkerPicker(){
   }else if(showDup){
     already = new Set(currentSites[workerPickerTargetSiteIdx].workers);
   }else{
+    // 日中と夜勤は時間帯が違うので、同じ時間帯(日中どうし・夜勤どうし)の現場に配置済みの人だけ除外する
+    // (日中に働いた人をそのまま夜勤の現場に入れられるように)
+    const night = !!currentSites[workerPickerTargetSiteIdx].night;
     already = new Set();
-    currentSites.forEach(s => s.workers.forEach(w => already.add(w)));
+    currentSites.forEach(s => { if(!!s.night === night) s.workers.forEach(w => already.add(w)); });
   }
   const excluded = kintaiExcludeSet || new Set();
   // 候補は「勤怠管理アプリの一覧」と「こちらのアプリで手入力登録した在籍作業員」の両方から出す
@@ -701,6 +772,7 @@ let genbaSites = null; // 現場情報管理システム側の現場一覧(キ�
 function openSitePicker(){
   document.getElementById('site-picker-overlay').classList.add('show');
   document.getElementById('site-picker-filter').value = '';
+  document.getElementById('site-picker-night').checked = false;
   document.getElementById('new-site-manual-name').value = '';
   if(genbaSites === null){
     loadGenbaSites();
@@ -736,7 +808,8 @@ function renderSitePicker(){
   const listEl = document.getElementById('site-picker-list');
   if(!listEl) return;
   const filterText = (document.getElementById('site-picker-filter').value || '').trim();
-  const already = new Set(currentSites.map(s => s.name));
+  const pickNight = document.getElementById('site-picker-night').checked;
+  const already = new Set(currentSites.filter(s => !!s.night === pickNight).map(s => s.name));
   let list = genbaSites.filter(s => !already.has(s.name));
   if(filterText) list = list.filter(s => s.name.includes(filterText));
 
@@ -755,9 +828,14 @@ function renderSitePicker(){
 }
 
 function pickSite(name){
+  const night = document.getElementById('site-picker-night').checked || isNightSiteName(name);
+  if(currentSites.some(s => isSameCard(s, name, night))){
+    showToast('「' + name + '」' + (night ? 'の夜勤' : '') + 'のカードはすでにあります');
+    return;
+  }
   postAction({action:'addSite', name}).then(res => {
     if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'追加に失敗しました')); return; }
-    currentSites.push({name, workers: [], workerItems: {}});
+    currentSites.push({name, night, workers: [], workerItems: {}});
     renderSites();
     closeSitePicker();
     showToast('✅ 「' + name + '」を追加しました');
@@ -911,7 +989,7 @@ function loadJissekiData(date, seq){
       if(seq !== loadSeq) return;
       if(res.status !== 'ok'){ showToast('❌ ' + (res.message||'読み込み失敗')); return; }
       jisseki = {confirmed: !!res.confirmed, plan: res.plan || {}, temp: res.temp || null, threshold: res.threshold || 34};
-      currentSites = (res.sites || []).map(normalizeSite);
+      currentSites = (res.sites || []).map(s => normalizeSite(fromServerSite(s)));
       allWorkers   = res.allWorkers || [];
       allItems     = res.allItems || [];
       renderSites();
@@ -944,7 +1022,7 @@ function renderJissekiInfo(){
 
 async function saveJisseki(date){
   const sites = currentSites.filter(s => s.workers.length > 0).map(s => ({
-    name: s.name, workers: s.workers, workerItems: s.workerItems, juice: s.juice, overtime: s.overtime, heat: s.heat
+    name: s.name, workers: s.workers, workerItems: itemsForSave(s), juice: s.juice, overtime: s.overtime, heat: s.heat
   }));
   if(date > todayStr() && !confirm(date + ' はまだ先の日付です。実績として確定してよろしいですか?')) return;
   if(sites.length === 0 && !confirm(date + ' を「誰も働いていない日」として確定します。よろしいですか?')) return;
